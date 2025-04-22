@@ -13,6 +13,10 @@ def main(configs):
     print('one')
     model, optimizer, dataDims = initialize_training(configs)
     #model.cpu()
+    rundir = configs.experiment_name
+    if not os.path.isdir(rundir):
+        os.makedirs(rundir)
+
 
    # gc.collect()
     torch.cuda.empty_cache()
@@ -50,7 +54,7 @@ def main(configs):
         tr, te, _ = get_dataloaders(configs)
        # print(['tr and te',len(tr),len(te)])
     #    print([configs.training_batch_size])
-        logfile = configs.experiment_name + '.log'
+        logfile = os.path.join(rundir, configs.experiment_name + '.log')
         f = open(logfile, 'w')
         while (epoch <= (configs.max_epochs + 1)) & (converged == 0):  # over a certain number of epochs or until converged
             err_tr, time_tr = model_epoch(configs, dataDims = dataDims, trainData = tr, model = model, optimizer = optimizer, update_gradients = True)  # train & compute loss
@@ -68,7 +72,7 @@ def main(configs):
                 save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict()},'./model-amorphous-65layer40filter-epoch50.pt')
+                    'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-amorphous-gen-{epoch}.pt'))
                 sample, time_ge = generation(configs, dataDims, model,epoch)
 
 
@@ -77,7 +81,7 @@ def main(configs):
                   save({
                   'epoch': epoch,
                   'model_state_dict': model.state_dict(),
-                  'optimizer_state_dict': optimizer.state_dict()},'./model-amorphous-epoch'+str(epoch)+'.pt')
+                  'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-epoch_{epoch}.pt'))
 
 
 
@@ -88,7 +92,7 @@ def main(configs):
         save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()},'./model-amorphous-65layer40filter-epoch50.pt')
+            'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-amorphous-{configs.experiment_name}.pt'))
     #    sample, time_ge = generation(configs, dataDims, model,epoch)
        # log_generation_stats(configs, epoch, experiment, sample, agreements, output_analysis)
     print('finished!')

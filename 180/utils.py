@@ -134,7 +134,7 @@ def initialize_training(configs):
     ddp_model = DDP(model, device_ids=[rank],find_unused_parameters=True)
     dataDims['conv field'] = configs.conv_layers + configs.conv_size // 2
 
-    optimizer = optim.AdamW(ddp_model.parameters(),lr=0.0001, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
+    optimizer = optim.AdamW(ddp_model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
 
     return ddp_model, optimizer, dataDims
 

@@ -33,6 +33,7 @@ parser.add_argument('--dist-backend', default='gloo', type=str, help='')
 # parser.add_argument('-l', '--generation_conditions', nargs='+', default=[0.23, 0.22]) # conditions used to generate samples at runtime
 
 # training parameters
+parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--training_dataset', type = str, default = 'amorphous') # name of training dataset - 'fake welds', 'welds 1'
 parser.add_argument('--training_batch_size', type = int, default = 16) # maximum training batch size
 add_bool_arg(parser, 'auto_training_batch', default = True) # whether to automatically set training batch size to largest value < the max
