@@ -50,6 +50,8 @@ def main(configs):
         tr, te, _ = get_dataloaders(configs)
        # print(['tr and te',len(tr),len(te)])
     #    print([configs.training_batch_size])
+        logfile = configs.experiment_name + '.log'
+        f = open(logfile, 'w')
         while (epoch <= (configs.max_epochs + 1)) & (converged == 0):  # over a certain number of epochs or until converged
             err_tr, time_tr = model_epoch(configs, dataDims = dataDims, trainData = tr, model = model, optimizer = optimizer, update_gradients = True)  # train & compute loss
             err_te, time_te = model_epoch(configs, dataDims = dataDims, trainData = te, model = model, update_gradients = False)  # compute loss on test set
@@ -58,8 +60,7 @@ def main(configs):
             print('epoch={}; nll_tr={:.5f}; nll_te={:.5f}; time_tr={:.1f}s; time_te={:.1f}s'.format(epoch, torch.mean(torch.stack(err_tr)), torch.mean(torch.stack(err_te)), time_tr, time_te))
             converged = auto_convergence(configs, epoch, tr_err_hist, te_err_hist)
             if int(epoch % 2 == 0):
-                with open('check8batch' + str(epoch) + '.txt', 'w') as f:
-                   f.write(str(torch.mean(torch.stack(err_tr))) + " " + str(time_tr) + " " + str(torch.mean(torch.stack(err_te))))
+                f.write(str(epoch) + " " + str(torch.mean(torch.stack(err_tr))) + " " + str(time_tr) + " " + str(torch.mean(torch.stack(err_te)))+'\n')
 
             if epoch % configs.generation_period == 0:
                 sample, time_ge= generation(configs, dataDims, model,epoch)
@@ -83,6 +84,7 @@ def main(configs):
             epoch += 1
 
         # generate samples
+        f.close()
         save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
