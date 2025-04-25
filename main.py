@@ -2,21 +2,7 @@ from mainfile import main
 import argparse
 import json
 from pathlib import Path
-
-
-parser = argparse.ArgumentParser()
-
-def save_args(configs):
-    """Saves run arguments to JSON file to keep track of experimens/ensure reproducibility."""
-    outdir = Path(configs.experiment_name)
-    outdir.mkdir(exist_ok=True)
-    json_file = outdir / "configs.json"
-    print(f'Saving args to {json_file}...',end = ' ', flush=True)
-    args_dict = vars(configs)
-
-    with open(json_file, 'w') as fo:
-        json.dump(args_dict, fo, indent=4)
-    print('Done!', flush=True)
+from utils import save_args
 
     
 def add_bool_arg(parser, name, default=False):
@@ -25,6 +11,8 @@ def add_bool_arg(parser, name, default=False):
     group.add_argument('--no-' + name, dest=name, action = 'store_false')
     parser.set_defaults(**{name:default})
 
+
+parser = argparse.ArgumentParser()
 parser.add_argument('--run_num', type = int, default = 0)
 parser.add_argument('--experiment_name', type = str, default = 'testing')
 # model architecture
@@ -76,5 +64,5 @@ add_bool_arg(parser, 'comet', default=False)
 configs = parser.parse_args()
 
 if __name__ == '__main__':  # run it!
-    save_args(configs)
+    save_args(configs,'train')
     main(configs)

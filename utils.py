@@ -1,5 +1,6 @@
 # metrics to determine the performance of our learning algorithm
 #from comet_ml import Experiment
+from pathlib import Path
 import numpy as np
 import torch.nn.functional as F
 import os
@@ -9,6 +10,7 @@ from torch.utils import data
 import time
 from torch.utils.data import Dataset
 import pickle
+import json
 import sys
 import tqdm
 from tqdm import tqdm as barthing
@@ -657,3 +659,15 @@ def parse_losses(logfile,nepochs=1000, log_frequency=2):
             te_loss[k] = float(split_line[4].split('(')[1][:-1]) # get rid of comma at end of number
             k+=1
     return epochs, tr_loss, te_loss
+
+def save_args(configs, run_type):
+    """Saves run arguments to JSON file to keep track of experimens/ensure reproducibility."""
+    outdir = Path(configs.experiment_name)
+    outdir.mkdir(exist_ok=True)
+    json_file = outdir / f'{run_type}_configs.json'
+    print(f'Saving args to {json_file}...',end = ' ', flush=True)
+    args_dict = vars(configs)
+
+    with open(json_file, 'w') as fo:
+        json.dump(args_dict, fo, indent=4)
+    print('Done!', flush=True)

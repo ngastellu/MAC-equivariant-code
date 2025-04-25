@@ -2,16 +2,15 @@ import os
 import numpy as np
 import torch
 import pickle
-import time
 from tqdm import tqdm as barthing
 import tqdm
-import json
 from torch import nn, optim
 from models import *
 import argparse
 import json
 from utils import parse_losses
 from glob import glob
+from utils import save_args
 
 def best_epoch(run_name):
     logfile = f'{run_name}/{run_name}.log'
@@ -22,6 +21,20 @@ def best_epoch(run_name):
     ibest = saved_epochs[np.argmin(saved_te_losses)]
     return ibest
 
+def load_train_args(run_name):
+    json_file = os.path.join(run_name, 'train_configs.json')
+    with open(json_file, 'r') as fo:
+        args_dict = json.load(fo)
+    return args_dict
+
+def add_training_args(parser, overwrite=False):
+    """Merges training args saved to JSON with the generation args defined in this script."""
+    args_dict = load_train_args(parser.training_run_name)
+    for k, v in args_dict.items():
+        if overwrite or not hasattr(parser, k):
+            setattr(parser, k, v)
+    return parser
+
 
 def add_bool_arg(parser, name, default=False):
     group = parser.add_mutually_exclusive_group(required=False)
@@ -29,32 +42,12 @@ def add_bool_arg(parser, name, default=False):
     group.add_argument('--no-' + name, dest=name, action = 'store_false')
     parser.set_defaults(**{name:default})
 
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--run_num', type = int, default = 0)
-parser.add_argument('--experiment_name', type = str, default = 'testing')
-# model architecture
-parser.add_argument('--model', type = str, default = 'gated1') # model architecture -- 'gated1'
-parser.add_argument('--fc_depth', type = int, default = 256) # number of neurons for final fully connected layers
-parser.add_argument('--init_conv_size', type=int, default= 5) # size of the initial convolutional window # ODD NUMBER
-parser.add_argument('--conv_filters', type = int, default = 40) # number of filters per gated convolutional layer
-parser.add_argument('--init_conv_filters', type=int, default = 40) # number of filters for the first convolutional layer  # MUST BE THE SAME AS 'conv_filters'
-parser.add_argument('--conv_size', type = int, default = 3) # ODD NUMBER
-parser.add_argument('--conv_layers', type = int, default = 65) # number of layers in the convnet - should be larger than the correlation length
-parser.add_argument('--dilation', type = int, default = 1) # must be 1 - greater than 1 is deprecated
-parser.add_argument('--activation_function', type = str, default = 'relu') # 'gated' is only working option
-parser.add_argument('--fc_dropout_probability', type = float, default = 0.21) # dropout probability on hidden FC layer(s) [0,1)
-parser.add_argument('--fc_norm', type = str, default = 'batch') # None or 'batch'
-parser.add_argument('--init_method', default='tcp://127.0.0.1:3456', type=str, help='')
-parser.add_argument('--dist-backend', default='gloo', type=str, help='')
-
-# add_bool_arg(parser, 'subsample_images', default = True) # cut training images in transverse direction by a custom amount at runtime
-#
-# add_bool_arg(parser,'do_conditioning', default = True) # incorporate conditioning variables in model training
-# # parser.add_argument('--init_conditioning_filters', type=int, default=20) # number of filters for optional conditioning layers
-# parser.add_argument('-l', '--generation_conditions', nargs='+', default=[0.23, 0.22]) # conditions used to generate samples at runtime
-
 
 # sample generation parameters
+parser.add_argument('--training_run_name', type=str)
+parser.add_argument('--experiment_name', type=str, default=parser.training_run_name)
 parser.add_argument('--epoch_chkpt', type=int, default=0) # epoch index from which the model should be loaded (make sure a checkpoint file corresponding to that epoch exists); if set to negative, find the checkpoint with lowest test loss
 parser.add_argument('--bound_type', type = str, default = 'empty') # what is outside the image during training and generation 'empty'
 parser.add_argument('--boundary_layers', type = int, default = 0) # number of layers of conv_field between sample and actual image boundary
@@ -69,11 +62,15 @@ parser.add_argument('--n_samples', type = int, default = 1) # number of samples 
 add_bool_arg(parser, 'CUDA', default=True)
 add_bool_arg(parser, 'comet', default=False)
 
+parser = add_training_args(parser)
+
+
 configs,unknown= parser.parse_known_args()
+save_args(configs, 'generate')
 
-run_name = configs.experiment_name
+model_name = configs.training_run_name
 
-a_file = open(os.path.join(run_name, "datadimsrelu.pkl","rb"))
+a_file = open(os.path.join(model_name, "datadimsrelu.pkl","rb"))
 dataDims = pickle. load(a_file)
 
 model = EquivariantPixelCNN(configs,dataDims)
@@ -82,13 +79,13 @@ model.eval()
 model.to(torch.device("cuda:0"))
 
 if configs.epoch_chkpt > 0:
-    checkpoint = torch.load(os.path.join(run_name, f'model_{run_name}-epoch_{configs.epoch_chkpt}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model_{model_name}-epoch_{configs.epoch_chkpt}.pt'), map_location=device)
 elif configs.epoch_chkpt < 0:
     # find checkpoint with lowest test loss
-    ichkpt = best_epoch(run_name)
-    checkpoint = torch.load(os.path.join(run_name, f'model_{run_name}-epoch_{ichkpt}.pt'), map_location=device)
+    ichkpt = best_epoch(model_name)
+    checkpoint = torch.load(os.path.join(model_name, f'model_{model_name}-epoch_{ichkpt}.pt'), map_location=device)
 else:
-    checkpoint = torch.load(os.path.join(run_name, f'model_{run_name}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model_{model_name}.pt'), map_location=device)
 bc_old=checkpoint['model_state_dict']
 bc_new=bc_old.copy()
 for items in bc_old.items():
@@ -265,7 +262,7 @@ elif configs.sample_generation_mode == 'parallel':
 
 
            
-            np.save('samples/{}_{}samples_smtemp_{}'.format(configs.experiment_name, configs.softmax_temp), sample.cpu())
+            np.save(os.path.join(configs.training_run_name,'samples','{}_smtemp_{}'.format(configs.experiment_name, configs.softmax_temp)), sample.cpu())
 
 
 
