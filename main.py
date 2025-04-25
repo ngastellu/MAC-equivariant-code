@@ -1,8 +1,24 @@
 from mainfile import main
 import argparse
+import json
+from pathlib import Path
 
 
 parser = argparse.ArgumentParser()
+
+def save_args(configs):
+    """Saves run arguments to JSON file to keep track of experimens/ensure reproducibility."""
+    outdir = Path(configs.experiment_name)
+    outdir.mkdir(exist_ok=True)
+    json_file = outdir / "configs.json"
+    print(f'Saving args to {json_file}...',end = ' ', flush=True)
+    args_dict = vars(configs)
+
+    with open(json_file, 'w') as fo:
+        json.dump(args_dict, fo, indent=4)
+    print('Done!', flush=True)
+
+    
 def add_bool_arg(parser, name, default=False):
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--' + name, dest=name, action = 'store_true')
@@ -60,4 +76,5 @@ add_bool_arg(parser, 'comet', default=False)
 configs = parser.parse_args()
 
 if __name__ == '__main__':  # run it!
+    save_args(configs)
     main(configs)

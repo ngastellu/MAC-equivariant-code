@@ -8,17 +8,15 @@ import gc
 
 
 def main(configs):
-   # experiment = get_comet_experiment(configs)
-    model, optimizer, dataDims = initialize_training(configs)
-    #model.cpu()
+
     rundir = configs.experiment_name
     if not os.path.isdir(rundir):
         os.makedirs(rundir)
-    
-    # save configs to file
-    with open(os.path.join(rundir, 'configs.txt'), 'w') as fo:
-        for arg, value in vars(configs).items():
-            fo.write(f'{arg}\t{value}\n')
+
+   # experiment = get_comet_experiment(configs)
+
+    model, optimizer, dataDims = initialize_training(configs)
+    #model.cpu()
 
 
    # gc.collect()
