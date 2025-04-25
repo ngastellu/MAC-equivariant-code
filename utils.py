@@ -61,7 +61,7 @@ class build_dataset(Dataset):
             'conv field' : configs.conv_layers + configs.conv_size // 2
 
         }
-        a_file = open("datadimsrelu.pkl", "wb")
+        a_file = open(f"{configs.experiment_name}/datadimsrelu.pkl", "wb")
         pickle.dump(self.dataDims, a_file)
         a_file.close()
 

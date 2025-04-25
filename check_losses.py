@@ -3,8 +3,25 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from utils import parse_losses
 
+
+def parse_losses(logfile,nepochs=1000, log_frequency=2):
+    npts = nepochs // log_frequency # nb of logged loss entries
+    epochs = np.zeros(npts,dtype=int)
+    tr_loss = np.zeros(npts)
+    te_loss = np.zeros(npts)
+    with open(logfile) as fo:
+        k = 0
+        for line in fo:
+            line = line.strip()
+            if len(line) == 0:
+                continue # skip empty lines
+            split_line = line.split()
+            epochs[k] = int(split_line[0])
+            tr_loss[k] = float(split_line[1].split('(')[1][:-1]) # get rid of comma at end of number
+            te_loss[k] = float(split_line[4].split('(')[1][:-1]) # get rid of comma at end of number
+            k+=1
+    return epochs, tr_loss, te_loss
 
 
 def plot_losses(epochs, tr_loss, te_loss, hyperparam_name, hyperparam_val, show=True, plt_objs=None,c_tr=None,c_te=None):
@@ -28,11 +45,11 @@ def plot_losses(epochs, tr_loss, te_loss, hyperparam_name, hyperparam_val, show=
 
 
 if __name__ == "__main__":
-    conv_layers = range(60,110,10)
+    conv_layers = [60,70]
     lowest_tr_losses = np.zeros(len(conv_layers))
     lowest_te_losses = np.zeros(len(conv_layers))
     for k, c in enumerate(conv_layers):
-        logfile = f"/Users/nico/Desktop/simulation_outputs/equivariant_MAC/conv_layers_scan/conv_layers_{c}.log"
+        logfile = f"/Users/nico/Desktop/simulation_outputs/equivariant_MAC/conv_layers_scan/conv_layers_{c}_lr_1e-6.log"
         filename = os.path.basename(logfile)
         hp_name = '_'.join(filename.split('_')[:-1])
         hp_val = '.'.join(filename.split('_')[-1].split('.')[:-1])
