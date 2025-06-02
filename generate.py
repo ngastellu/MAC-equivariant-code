@@ -15,7 +15,7 @@ from utils import save_args
 def best_epoch(run_name):
     logfile = f'{run_name}/{run_name}.log'
     epochs, _, te_loss = parse_losses(logfile)
-    saved_epochs = np.array([int(chk.split('_')[-1].split('.')[0]) for chk in glob(f'{run_name}/model-amorphous_{run_name}-epoch*.pt')])
+    saved_epochs = np.array([int(chk.split('_')[-1].split('.')[0]) for chk in glob(f'{run_name}/model-amorphous-{run_name}-epoch*.pt')])
     ii = (epochs == saved_epochs[:,None]).nonzero()[1]
     saved_te_losses = te_loss[ii]
     ibest = saved_epochs[np.argmin(saved_te_losses)]
@@ -91,9 +91,9 @@ if configs.epoch_chkpt > 0:
 elif configs.epoch_chkpt < 0:
     # find checkpoint with lowest test loss
     ichkpt = best_epoch(model_name)
-    checkpoint = torch.load(os.path.join(model_name, f'model_{model_name}-epoch_{ichkpt}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}-epoch_{ichkpt}.pt'), map_location=device)
 else:
-    checkpoint = torch.load(os.path.join(model_name, f'model_{model_name}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}.pt'), map_location=device)
 bc_old=checkpoint['model_state_dict']
 bc_new=bc_old.copy()
 for items in bc_old.items():
