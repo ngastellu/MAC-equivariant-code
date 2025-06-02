@@ -30,6 +30,9 @@ parser.add_argument('--fc_norm', type = str, default = 'batch') # None or 'batch
 parser.add_argument('--init_method', default='tcp://127.0.0.1:3456', type=str, help='')
 parser.add_argument('--dist-backend', default='gloo', type=str, help='')
 
+# ******* This arg determines which type of equivariant model is used; '90' or '180' (default)
+parser.add_argument('--nrot', type=int, default=2, choices=[2,4]) # 
+
 # add_bool_arg(parser, 'subsample_images', default = True) # cut training images in transverse direction by a custom amount at runtime
 #
 # add_bool_arg(parser,'do_conditioning', default = True) # incorporate conditioning variables in model training

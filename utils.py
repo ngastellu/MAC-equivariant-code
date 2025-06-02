@@ -37,13 +37,13 @@ class build_dataset(Dataset):
            # self.samples2 = self.samples[:,:,-212:,-212:]
 
             # augment by horizontal flips
-       #     flipped = np.flip(self.samples.copy(),axis=3)
-        #   flipped2 = np.flip(self.samples.copy(),axis=2)
+            flipped = np.flip(self.samples.copy(),axis=3)
+            flipped2 = np.flip(self.samples.copy(),axis=2)
             rot1=np.rot90(self.samples.copy(),k=1,axes=(2,3))
             rot2=np.rot90(self.samples.copy(),k=2,axes=(2,3))
             rot3=np.rot90(self.samples.copy(),k=3,axes=(2,3))
 
-            self.samples = np.concatenate((self.samples,rot1,rot3,rot2),axis=0)
+            self.samples = np.concatenate((self.samples,rot1,rot3,rot2,flipped,flipped2),axis=0)
 
 
 

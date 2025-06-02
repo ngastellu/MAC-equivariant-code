@@ -54,7 +54,7 @@ if __name__ == "__main__":
         hp_name = '_'.join(filename.split('_')[:-1])
         hp_val = '.'.join(filename.split('_')[-1].split('.')[:-1])
 
-        epochs, tr_loss, te_loss = parse_losses(logfile)
+        epochs, tr_loss, te_loss = parse_losses(logfile,nepochs=3000)
         imin_tr = np.argmin(tr_loss)
         imin_te = np.argmin(te_loss)
         lowest_tr_losses[k] = tr_loss[imin_tr]

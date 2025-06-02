@@ -47,7 +47,7 @@ parser = argparse.ArgumentParser()
 
 # sample generation parameters
 parser.add_argument('--training_run_name', type=str)
-parser.add_argument('--experiment_name', type=str, default=parser.training_run_name)
+parser.add_argument('--experiment_name', type=str, default='')
 parser.add_argument('--epoch_chkpt', type=int, default=0) # epoch index from which the model should be loaded (make sure a checkpoint file corresponding to that epoch exists); if set to negative, find the checkpoint with lowest test loss
 parser.add_argument('--bound_type', type = str, default = 'empty') # what is outside the image during training and generation 'empty'
 parser.add_argument('--boundary_layers', type = int, default = 0) # number of layers of conv_field between sample and actual image boundary
@@ -62,15 +62,23 @@ parser.add_argument('--n_samples', type = int, default = 1) # number of samples 
 add_bool_arg(parser, 'CUDA', default=True)
 add_bool_arg(parser, 'comet', default=False)
 
-parser = add_training_args(parser)
+
 
 
 configs,unknown= parser.parse_known_args()
+configs = add_training_args(configs)
 save_args(configs, 'generate')
+
+
 
 model_name = configs.training_run_name
 
-a_file = open(os.path.join(model_name, "datadimsrelu.pkl","rb"))
+os.makedirs(f'{model_name}/samples', exist_ok=True)
+
+if configs.experiment_name == '':
+    configs.experiment_name =  f'{model_name}_Tsoftmax_{configs.softmax_temp}'
+
+a_file = open(os.path.join(model_name, "datadimsrelu.pkl"), "rb")
 dataDims = pickle. load(a_file)
 
 model = EquivariantPixelCNN(configs,dataDims)
@@ -262,8 +270,4 @@ elif configs.sample_generation_mode == 'parallel':
 
 
            
-            np.save(os.path.join(configs.training_run_name,'samples','{}_smtemp_{}'.format(configs.experiment_name, configs.softmax_temp)), sample.cpu())
-
-
-
-   
+            np.save(os.path.join(configs.training_run_name,'samples',f'{configs.experiment_name}.npy'), sample.cpu())
