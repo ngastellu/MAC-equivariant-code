@@ -76,7 +76,7 @@ class EquivariantMaskedConv2d_90(nn.Module):
         self.r2_act = gspaces.Rot2dOnR2(N=4)
         self.register_buffer('mask', mask)
 
-    def forward(self, input, k):
+    def forward(self, input):
         print('***** In EquivariantMaskedConv2d_90.forward *****',flush=True)
         # Expand the weights to get the convolution kernels
         expanded_weights, expanded_bias = self.conv.expand_parameters()
@@ -87,10 +87,7 @@ class EquivariantMaskedConv2d_90(nn.Module):
         # Apply the mask to the expanded weights
         # print(expanded_weights.shape)
         expanded_weights1 = expanded_weights[:self.filters]
-        np.save(f'expanded_weights1-{k}.npy', expanded_weights1.detach().cpu().numpy())
-
         expanded_weights2 = expanded_weights[self.filters:int(self.filters*2), :]
-        np.save(f'expanded_weights2-{k}.npy', expanded_weights2.detach().cpu().numpy())
 
         if expanded_bias != None:
             expanded_bias1 = expanded_bias[:self.filters]
@@ -149,7 +146,8 @@ class EquivariantPixelCNN(nn.Module):
         super().__init__()
         self.act_func = configs.activation_function
         self.filters = configs.conv_filters
-        self.layers = configs.conv_layers
+        self.nb_equivariant_layers = configs.equivariant_layers
+        self.nb_vanilla_layers = configs.vanilla_layers
         self.activation = Activation(self.act_func)
         self.nrot = configs.nrot # number of rotations of convolutional filters 
 
@@ -174,16 +172,19 @@ class EquivariantPixelCNN(nn.Module):
         # Initial masked convolution (Type 'A')
         if self.nrot == 2:
             self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
-            self.conv_layers = nn.ModuleList([
+            self.equivariant_layers = nn.ModuleList([
                 EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
-                for _ in range(self.layers)
+                for _ in range(self.nb_equivariant_layers)
             ])
         else: # nrot = 4
             self.hidden_type2 = e2nn.FieldType(self.r2_act, int(self.filters/2) * [self.r2_act.regular_repr])
             self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
-            self.conv_layers = nn.ModuleList([
+            self.equivariant_layers = nn.ModuleList([
                 EquivariantMaskedConv2d_90('B', self.hidden_type2, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
-                for _ in range(self.layers)
+                for _ in range(self.nb_equivariant_layers)
+            ])
+        self.vanilla_layers = nn.ModuleList([MaskedConv2d('B', self.filters*2, self.filters*2, kernel_size, padding=padding, bias=True)
+                                             for _ in range(self.nb_vanilla_layers)
         ])
 #  og1workedelongated      self.conv_layers = nn.ModuleList(
 #            [MaskedConv2d('B', f_in[i], f_out[i] , kernel_size, padding) for i in range(self.layers)]
@@ -211,18 +212,22 @@ class EquivariantPixelCNN(nn.Module):
        # x = e2nn.GeometricTensor(x, self.input_type)  # Convert to an equivariant tensor
        # print( self.initial_conv(x))
         print(f'--------- initial_conv ---------',flush=True)
-        x = self.initial_conv(x,0)  # Initial masked convolution
+        x = self.initial_conv(x)  # Initial masked convolution
 
         if isinstance(x, e2nn.GeometricTensor):
            x = x.tensor  # Extract tensor if it's a GeometricTensor
      #   print([x.shape,'1'])
         x = self.activation(x)
 
-        for k, layer in enumerate(self.conv_layers):
-            print(f'\n--------- hidden_layer # {k} ---------',flush=True)
-            x = layer(x,k+1)
+        for layer in self.equivariant_layers:
+            x = layer(x)
             x = x.tensor
             x = self.activation(x)
+        
+        for layer in self.vanilla_layers:
+            x = layer(x)
+            x = self.activation(x)
+        
 
        # x = x.tensor
        #  print(self.filters * [self.r2_act.regular_repr])
