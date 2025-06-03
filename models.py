@@ -170,22 +170,24 @@ class EquivariantPixelCNN(nn.Module):
         self.output_type = e2nn.FieldType(self.r2_act, outmaps * [self.r2_act.trivial_repr])
 
         # Initial masked convolution (Type 'A')
+
+        self.initial_conv = MaskedConv2d('A', channels ,self.filters * 2, kernel_size, padding=padding, bias=True)
+
+        self.vanilla_layers = nn.ModuleList([MaskedConv2d('B', self.filters*2, self.filters*2, kernel_size, padding=padding, bias=True)
+                                             for _ in range(self.nb_vanilla_layers)
+        ])
+
         if self.nrot == 2:
-            self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
             self.equivariant_layers = nn.ModuleList([
                 EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
                 for _ in range(self.nb_equivariant_layers)
             ])
         else: # nrot = 4
             self.hidden_type2 = e2nn.FieldType(self.r2_act, int(self.filters/2) * [self.r2_act.regular_repr])
-            self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
             self.equivariant_layers = nn.ModuleList([
                 EquivariantMaskedConv2d_90('B', self.hidden_type2, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
                 for _ in range(self.nb_equivariant_layers)
             ])
-        self.vanilla_layers = nn.ModuleList([MaskedConv2d('B', self.filters*2, self.filters*2, kernel_size, padding=padding, bias=True)
-                                             for _ in range(self.nb_vanilla_layers)
-        ])
 #  og1workedelongated      self.conv_layers = nn.ModuleList(
 #            [MaskedConv2d('B', f_in[i], f_out[i] , kernel_size, padding) for i in range(self.layers)]
 #        )
@@ -219,15 +221,15 @@ class EquivariantPixelCNN(nn.Module):
      #   print([x.shape,'1'])
         x = self.activation(x)
 
+        for layer in self.vanilla_layers:
+            x = layer(x)
+            x = self.activation(x)
+
         for layer in self.equivariant_layers:
             x = layer(x)
             x = x.tensor
             x = self.activation(x)
-        
-        for layer in self.vanilla_layers:
-            x = layer(x)
-            x = self.activation(x)
-        
+         
 
        # x = x.tensor
        #  print(self.filters * [self.r2_act.regular_repr])
