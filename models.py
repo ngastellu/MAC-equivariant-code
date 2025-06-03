@@ -166,18 +166,18 @@ class EquivariantPixelCNN(nn.Module):
         self.output_type = e2nn.FieldType(self.r2_act, outmaps * [self.r2_act.trivial_repr])
 
         # Initial masked convolution (Type 'A')
-        if self.nrot == 2:
-            self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
-            self.conv_layers = nn.ModuleList([
-                EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
-                for _ in range(self.layers)
-            ])
-        else: # nrot = 4
-            self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
-            self.conv_layers = nn.ModuleList([
-                EquivariantMaskedConv2d_90('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
-                for _ in range(self.layers)
+        # if self.nrot == 2:
+        self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
+        self.conv_layers = nn.ModuleList([
+            EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
+            for _ in range(self.layers)
         ])
+        # else: # nrot = 4
+        #     self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
+        #     self.conv_layers = nn.ModuleList([
+        #         EquivariantMaskedConv2d_90('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
+        #         for _ in range(self.layers)
+        # ])
 #  og1workedelongated      self.conv_layers = nn.ModuleList(
 #            [MaskedConv2d('B', f_in[i], f_out[i] , kernel_size, padding) for i in range(self.layers)]
 #        )
