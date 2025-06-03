@@ -60,7 +60,7 @@ class build_dataset(Dataset):
             'dataset length' : len(self.samples),
             'sample x dim' : self.samples.shape[-1] * configs.sample_outpaint_ratio,
             'sample y dim' : self.samples.shape[-2] * configs.sample_outpaint_ratio,
-            'conv field' : configs.conv_layers + configs.conv_size // 2
+            'conv field' : configs.equivariant_layers + configs.vanilla_layers + configs.conv_size // 2
 
         }
         a_file = open(f"{configs.experiment_name}/datadimsrelu.pkl", "wb")
@@ -134,7 +134,7 @@ def initialize_training(configs):
     model = get_model(configs, dataDims)
     model= model.to(rank)
     ddp_model = DDP(model, device_ids=[rank],find_unused_parameters=True)
-    dataDims['conv field'] = configs.conv_layers + configs.conv_size // 2
+    dataDims['conv field'] = configs.equivariant_layers + configs.vanilla_layers + configs.conv_size // 2
 
     optimizer = optim.AdamW(ddp_model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
 

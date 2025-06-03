@@ -22,7 +22,8 @@ parser.add_argument('--init_conv_size', type=int, default= 3) # size of the init
 parser.add_argument('--conv_filters', type = int, default = 40) # number of filters per gated convolutional layer
 parser.add_argument('--init_conv_filters', type=int, default = 40) # number of filters for the first convolutional layer  # MUST BE THE SAME AS 'conv_filters'
 parser.add_argument('--conv_size', type = int, default = 3) # ODD NUMBER
-parser.add_argument('--conv_layers', type = int, default = 60) # number of layers in the convnet - should be larger than the correlation length
+parser.add_argument('--equivariant_layers', type = int, default = 60) # number of equivariant layers in the convnet - should be larger than the correlation length
+parser.add_argument('--vanilla_layers', type = int, default = 60) # number of equivariant layers in the convnet - should be larger than the correlation length
 parser.add_argument('--dilation', type = int, default = 1) # must be 1 - greater than 1 is deprecated
 parser.add_argument('--activation_function', type = str, default = 'relu') # 'gated' is only working option
 parser.add_argument('--fc_dropout_probability', type = float, default = 0.5) # dropout probability on hidden FC layer(s) [0,1)
