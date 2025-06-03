@@ -77,14 +77,17 @@ class EquivariantMaskedConv2d_90(nn.Module):
         self.register_buffer('mask', mask)
 
     def forward(self, input):
+        print('***** In EquivariantMaskedConv2d_90.forward *****',flush=True)
         # Expand the weights to get the convolution kernels
         expanded_weights, expanded_bias = self.conv.expand_parameters()
+        print(f'expanded_weights.shape = {expanded_weights.shape}', flush=True)
+        print(f'expanded_bias.shape = {expanded_bias.shape}', flush=True)
+        print(f'self.filters = {self.filters}', flush=True)
         # Apply the mask to the expanded weights
         # print(expanded_weights.shape)
         expanded_weights1 = expanded_weights[:self.filters]
         expanded_weights2 = expanded_weights[self.filters:int(self.filters*2), :]
         if expanded_bias != None:
-
             expanded_bias1 = expanded_bias[:self.filters]
             expanded_bias2 = expanded_bias[self.filters:self.filters*2]
         else:
@@ -166,18 +169,18 @@ class EquivariantPixelCNN(nn.Module):
         self.output_type = e2nn.FieldType(self.r2_act, outmaps * [self.r2_act.trivial_repr])
 
         # Initial masked convolution (Type 'A')
-        # if self.nrot == 2:
-        self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
-        self.conv_layers = nn.ModuleList([
-            EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
-            for _ in range(self.layers)
+        if self.nrot == 2:
+            self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
+            self.conv_layers = nn.ModuleList([
+                EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
+                for _ in range(self.layers)
+            ])
+        else: # nrot = 4
+            self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
+            self.conv_layers = nn.ModuleList([
+                EquivariantMaskedConv2d_90('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
+                for _ in range(self.layers)
         ])
-        # else: # nrot = 4
-        #     self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
-        #     self.conv_layers = nn.ModuleList([
-        #         EquivariantMaskedConv2d_90('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
-        #         for _ in range(self.layers)
-        # ])
 #  og1workedelongated      self.conv_layers = nn.ModuleList(
 #            [MaskedConv2d('B', f_in[i], f_out[i] , kernel_size, padding) for i in range(self.layers)]
 #        )
@@ -203,6 +206,7 @@ class EquivariantPixelCNN(nn.Module):
     def forward(self, x):
        # x = e2nn.GeometricTensor(x, self.input_type)  # Convert to an equivariant tensor
        # print( self.initial_conv(x))
+        print(f'--------- initial_conv ---------',flush=True)
         x = self.initial_conv(x)  # Initial masked convolution
 
         if isinstance(x, e2nn.GeometricTensor):
@@ -210,7 +214,8 @@ class EquivariantPixelCNN(nn.Module):
      #   print([x.shape,'1'])
         x = self.activation(x)
 
-        for layer in self.conv_layers:
+        for k, layer in enumerate(self.conv_layers):
+            print(f'\n--------- hidden_layer #k ---------',flush=True)
             x = layer(x)
             x = x.tensor
             x = self.activation(x)
