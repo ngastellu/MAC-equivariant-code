@@ -77,20 +77,14 @@ class EquivariantMaskedConv2d_90(nn.Module):
         self.register_buffer('mask', mask)
 
     def forward(self, input, k):
-        print('***** In EquivariantMaskedConv2d_90.forward *****',flush=True)
         # Expand the weights to get the convolution kernels
         expanded_weights, expanded_bias = self.conv.expand_parameters()
-        print(f'expanded_weights.shape = {expanded_weights.shape}', flush=True)
         # print(f'expanded_bias.shape = {expanded_bias.shape}', flush=True)
-        print(f'self.filters = {self.filters}', flush=True)
-        print(f'input.shape = {input.shape}', flush=True)
+
         # Apply the mask to the expanded weights
         # print(expanded_weights.shape)
         expanded_weights1 = expanded_weights[:self.filters]
-        np.save(f'expanded_weights1-{k}.npy', expanded_weights1.detach().cpu().numpy())
-
         expanded_weights2 = expanded_weights[self.filters:int(self.filters*2), :]
-        np.save(f'expanded_weights2-{k}.npy', expanded_weights2.detach().cpu().numpy())
 
         if expanded_bias != None:
             expanded_bias1 = expanded_bias[:self.filters]
@@ -122,7 +116,6 @@ class EquivariantMaskedConv2d_90(nn.Module):
         )
         # Concatenate the outputs
         output = torch.cat((output1, output2), dim=1)  # Concatenate along the channel dimension (dim=1)
-        print(f'output.shape = {output.shape}', flush=True)
         reduced_out_type = e2nn.FieldType(self.r2_act, self.filters*2 * [self.r2_act.trivial_repr])
         return e2nn.GeometricTensor(output, reduced_out_type)
 
@@ -210,7 +203,6 @@ class EquivariantPixelCNN(nn.Module):
     def forward(self, x):
        # x = e2nn.GeometricTensor(x, self.input_type)  # Convert to an equivariant tensor
        # print( self.initial_conv(x))
-        print(f'--------- initial_conv ---------',flush=True)
         x = self.initial_conv(x,0)  # Initial masked convolution
 
         if isinstance(x, e2nn.GeometricTensor):
@@ -219,7 +211,6 @@ class EquivariantPixelCNN(nn.Module):
         x = self.activation(x)
 
         for k, layer in enumerate(self.conv_layers):
-            print(f'\n--------- hidden_layer # {k} ---------',flush=True)
             x = layer(x,k+1)
             x = x.tensor
             x = self.activation(x)
