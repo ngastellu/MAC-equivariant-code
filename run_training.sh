@@ -31,7 +31,7 @@ export MASTER_ADDR=$master_addr
 echo "MASTER_ADDR="$MASTER_ADDR
 
 nn=(1 10 20 40 59)
-nvanilla="${nn[$SLURM_ARRAY_JOB_ID]}"
+nvanilla="${nn[$SLURM_ARRAY_TASK_ID]}"
 nequiv=$((60 - $nvanilla))
 
 python ./main.py --run_num=0 --experiment_name="rot_90_conv_layers_60_nvanilla_${nvanilla}" --max_epochs=3000 --nrot=4 --equivariant_layers="$nequiv" --vanilla_layers="$nvanilla"
