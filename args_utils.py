@@ -3,11 +3,8 @@ from pathlib import Path
 import json
 from glob import glob 
 import numpy as np
-from utils import parse_losses
 
 def max_epoch(run_name):
-    logfile = f'{run_name}/{run_name}.log'
-    epochs, _, te_loss = parse_losses(logfile)
     saved_epochs = np.array([int(chk.split('_')[-1].split('.')[0]) for chk in glob(f'{run_name}/model-epoch*.pt')])
     imax = np.max(saved_epochs)
     return imax
@@ -55,3 +52,21 @@ def save_args(configs, run_type):
     with open(json_file, 'w') as fo:
         json.dump(args_dict, fo, indent=4)
     print('Done!', flush=True)
+
+def parse_losses(logfile,nepochs=1000, log_frequency=2):
+    npts = nepochs // log_frequency # nb of logged loss entries
+    epochs = np.zeros(npts,dtype=int)
+    tr_loss = np.zeros(npts)
+    te_loss = np.zeros(npts)
+    with open(logfile) as fo:
+        k = 0
+        for line in fo:
+            line = line.strip()
+            if len(line) == 0:
+                continue # skip empty lines
+            split_line = line.split()
+            epochs[k] = int(split_line[0])
+            tr_loss[k] = float(split_line[1].split('(')[1][:-1]) # get rid of comma at end of number
+            te_loss[k] = float(split_line[4].split('(')[1][:-1]) # get rid of comma at end of number
+            k+=1
+    return epochs, tr_loss, te_loss
