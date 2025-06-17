@@ -140,6 +140,7 @@ def initialize_training(configs):
     return ddp_model, optimizer, dataDims
 
 def load_checkpoint_training(configs, run_dir, model, optim):
+    run_dir = Path(run_dir)
     cuda_avail = torch.cuda.is_available()
     if cuda_avail:
         device = torch.device('cuda:0')
@@ -666,20 +667,3 @@ def log_input_stats(configs, experiment, input_analysis):
 def standardize(data):
     return (data - np.mean(data)) / np.sqrt(np.var(data))
 
-def parse_losses(logfile,nepochs=1000, log_frequency=2):
-    npts = nepochs // log_frequency # nb of logged loss entries
-    epochs = np.zeros(npts,dtype=int)
-    tr_loss = np.zeros(npts)
-    te_loss = np.zeros(npts)
-    with open(logfile) as fo:
-        k = 0
-        for line in fo:
-            line = line.strip()
-            if len(line) == 0:
-                continue # skip empty lines
-            split_line = line.split()
-            epochs[k] = int(split_line[0])
-            tr_loss[k] = float(split_line[1].split('(')[1][:-1]) # get rid of comma at end of number
-            te_loss[k] = float(split_line[4].split('(')[1][:-1]) # get rid of comma at end of number
-            k+=1
-    return epochs, tr_loss, te_loss
