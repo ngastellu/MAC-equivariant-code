@@ -10,17 +10,17 @@ def main(configs):
     if not os.path.isdir(rundir):
         os.makedirs(rundir)
 
-        converged = 0
-        epoch = 1
-        tr_err_hist = []
-        te_err_hist = []
-    # experiment = get_comet_experiment(configs)
-        print(f'initialize_training...', end=' ', flush=True)
-        start = perf_counter()
-        model, optimizer, dataDims = initialize_training(configs)
-        end = perf_counter()
-        print(f'Done! [{end-start} seconds]', flush=True)
-    
+    converged = 0
+    epoch = 1
+    tr_err_hist = []
+    te_err_hist = []
+# experiment = get_comet_experiment(configs)
+    print(f'initialize_training...', end=' ', flush=True)
+    start = perf_counter()
+    model, optimizer, dataDims = initialize_training(configs)
+    end = perf_counter()
+    print(f'Done! [{end-start} seconds]', flush=True)
+
     if configs.start_epoch != 0:
         model, optimizer, epoch = load_checkpoint_training(configs, rundir, model, optimizer)
     #model.cpu()
