@@ -20,6 +20,7 @@ from Image_Processing_Utils import *
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
+from args_utils import max_epoch
 
 
 class build_dataset(Dataset):
@@ -139,6 +140,31 @@ def initialize_training(configs):
     optimizer = optim.AdamW(ddp_model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
 
     return ddp_model, optimizer, dataDims
+
+def load_checkpoint_training(configs, run_dir, model, optim):
+    cuda_avail = torch.cuda.is_available()
+    if cuda_avail:
+
+        device = torch.device('cuda:0')
+    else:
+        device = torch.device('cpu')
+
+    if configs.start_epoch > 0:
+        chk_path = run_dir / f'model-epoch_{configs.start_epoch}'
+        try:
+            torch.load(chk_path)
+        except FileNotFoundError as e:
+            print(f'[load_checkpoint_training] FileNotFoundError: {str(chk_path)}')
+            print(f'Loading most recent checkpoint instead.')
+
+    else: #negative start_epoch loads most recent checkpoint
+        latest_epoch = max_epoch(configs.experiment_name)
+        chk_path = run_dir / f'model-epoch_{latest_epoch}.pt'
+        checkpoint = torch.load(chk_path, map_location=device)
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optim.load_state_dict(checkpoint['optimizer_state_dict'])
+    return model, optim, latest_epoch+1
 
 def compute_loss(output, target):
     target = target[:,:1]

@@ -46,6 +46,9 @@ def main(configs):
         converged = 0
         tr_err_hist = []
         te_err_hist = []
+        
+        if configs.start_epoch != 0:
+            model, optimizer, epoch = load_checkpoint_training(configs, rundir, model, optimizer)
 
         #if configs.auto_training_batch:
         ##    configs.training_batch_size, changed = get_training_batch_size(configs, model)  # confirm we can keep on at this batch size
@@ -64,7 +67,10 @@ def main(configs):
 
        # print(['tr and te',len(tr),len(te)])
     #    print([configs.training_batch_size])
-        logfile = os.path.join(rundir, configs.experiment_name + '.log')
+        if epoch == 1:
+            logfile = os.path.join(rundir, configs.experiment_name + '.log')
+        else:
+            logfile = os.path.join(rundir, configs.experiment_name + f'_restart_epoch_{epoch}.log')
         f = open(logfile, 'w')
 
         # ------- BEGIN TRAINING LOOP -------
