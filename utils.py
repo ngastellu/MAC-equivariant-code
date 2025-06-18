@@ -156,7 +156,7 @@ def load_checkpoint_training(configs, run_dir, model, optim):
     else: #negative start_epoch loads most recent checkpoint
         latest_epoch = max_epoch(configs.experiment_name)
         chk_path = run_dir / f'model-epoch_{latest_epoch}.pt'
-        checkpoint = torch.load(chk_path, map_location=device)
+        checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
     
     model.load_state_dict(checkpoint['model_state_dict'])
     optim.load_state_dict(checkpoint['optimizer_state_dict'])
