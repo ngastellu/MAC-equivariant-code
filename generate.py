@@ -68,6 +68,8 @@ elif configs.epoch_chkpt == -2:
 else:
     checkpoint = torch.load(os.path.join(model_name, f'model-{model_name}.pt'), map_location=device)
 
+epoch = checkpoint['epoch']
+
 
 
 bc_old=checkpoint['model_state_dict']
@@ -246,4 +248,4 @@ elif configs.sample_generation_mode == 'parallel':
 
 
            
-            np.save(os.path.join(configs.training_run_name,'samples',f'{configs.experiment_name}.npy'), sample.cpu())
+            np.save(os.path.join(configs.training_run_name,'samples',f'{configs.experiment_name}_epoch-{epoch}.npy'), sample.cpu())
