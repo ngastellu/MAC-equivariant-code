@@ -10,37 +10,7 @@ import argparse
 import json
 from utils import parse_losses
 from glob import glob
-from utils import save_args
-
-def best_epoch(run_name):
-    logfile = f'{run_name}/{run_name}.log'
-    epochs, _, te_loss = parse_losses(logfile)
-    saved_epochs = np.array([int(chk.split('_')[-1].split('.')[0]) for chk in glob(f'{run_name}/model-amorphous-{run_name}-epoch*.pt')])
-    ii = (epochs == saved_epochs[:,None]).nonzero()[1]
-    saved_te_losses = te_loss[ii]
-    ibest = saved_epochs[np.argmin(saved_te_losses)]
-    return ibest
-
-def load_train_args(run_name):
-    json_file = os.path.join(run_name, 'train_configs.json')
-    with open(json_file, 'r') as fo:
-        args_dict = json.load(fo)
-    return args_dict
-
-def add_training_args(parser, overwrite=False):
-    """Merges training args saved to JSON with the generation args defined in this script."""
-    args_dict = load_train_args(parser.training_run_name)
-    for k, v in args_dict.items():
-        if overwrite or not hasattr(parser, k):
-            setattr(parser, k, v)
-    return parser
-
-
-def add_bool_arg(parser, name, default=False):
-    group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--' + name, dest=name, action = 'store_true')
-    group.add_argument('--no-' + name, dest=name, action = 'store_false')
-    parser.set_defaults(**{name:default})
+from args_utils import save_args, max_epoch, best_epoch, load_training_args, add_training_args, add_bool_arg
 
 
 parser = argparse.ArgumentParser()
@@ -82,16 +52,18 @@ a_file = open(os.path.join(model_name, "datadimsrelu.pkl"), "rb")
 dataDims = pickle. load(a_file)
 
 model = EquivariantPixelCNN(configs,dataDims)
-device = torch.device('cuda:0')
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.eval()
-model.to(torch.device("cuda:0"))
+model.to(device)
 
 if configs.epoch_chkpt > 0:
-    checkpoint = torch.load(os.path.join(model_name, f'model_{model_name}-epoch_{configs.epoch_chkpt}.pt'), map_location=device)
-elif configs.epoch_chkpt < 0:
-    # find checkpoint with lowest test loss
+    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{configs.epoch_chkpt}.pt'), map_location=device)
+elif configs.epoch_chkpt == -1: # use checkpoint with lowest test loss
     ichkpt = best_epoch(model_name)
-    checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}-epoch_{ichkpt}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
+elif configs.epoch_ckhpt == -2: # use most recent checkpoint
+    ichkpt = max_epoch(model_name)
+    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
 else:
     checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}.pt'), map_location=device)
 

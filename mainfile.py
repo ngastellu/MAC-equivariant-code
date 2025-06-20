@@ -102,12 +102,12 @@ def main(configs):
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-amorphous-gen-{epoch}.pt'))
-                sample, time_ge = generation(configs, dataDims, model,epoch)
+                    'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-gen_{epoch}.pt'))
+                sample, time_ge = generation(configs, dataDims, model,epoch) #save model whenever we use it to generate AMC
 
 
 
-            if epoch%100==0:
+            if epoch%100==0: #save model every 100 epochs no matter what
                 print('Saving model...', end=' ', flush=True)
                 start = perf_counter()
                 torch.save({
