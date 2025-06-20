@@ -94,6 +94,9 @@ elif configs.epoch_chkpt < 0:
     checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}-epoch_{ichkpt}.pt'), map_location=device)
 else:
     checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}.pt'), map_location=device)
+
+epoch = checkpoint['epoch']
+
 bc_old=checkpoint['model_state_dict']
 bc_new=bc_old.copy()
 for items in bc_old.items():
@@ -262,12 +265,5 @@ elif configs.sample_generation_mode == 'parallel':
 
             for k in range(dataDims['channels']):
                 sample[image, k, :, :] = sample_batch[:, k, (configs.boundary_layers + 1) * dataDims['conv field'] + 1:, (configs.boundary_layers + 1) * dataDims['conv field']:-((configs.boundary_layers + 1) * dataDims['conv field'])] * dataDims['classes'] - 1  # convert back to input space, +1 in y dim to get rid of first row
-
-
-   
-
-
-
-
-           
-            np.save(os.path.join(configs.training_run_name,'samples',f'{configs.experiment_name}.npy'), sample.cpu())
+ 
+            np.save(os.path.join(configs.training_run_name,'samples',f'{configs.experiment_name}_epoch-{epoch}.npy'), sample.cpu())
