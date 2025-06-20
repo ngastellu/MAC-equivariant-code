@@ -2,14 +2,9 @@ from mainfile import main
 import argparse
 import json
 from pathlib import Path
-from utils import save_args
+from args_utils import save_args, add_bool_arg
 
     
-def add_bool_arg(parser, name, default=False):
-    group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--' + name, dest=name, action = 'store_true')
-    group.add_argument('--no-' + name, dest=name, action = 'store_false')
-    parser.set_defaults(**{name:default})
 
 
 parser = argparse.ArgumentParser()
@@ -41,6 +36,7 @@ parser.add_argument('--nrot', type=int, default=2, choices=[2,4]) #
 # parser.add_argument('-l', '--generation_conditions', nargs='+', default=[0.23, 0.22]) # conditions used to generate samples at runtime
 
 # training parameters
+parser.add_argument('--start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--training_dataset', type = str, default = 'amorphous') # name of training dataset - 'fake welds', 'welds 1'
 parser.add_argument('--training_batch_size', type = int, default = 16) # maximum training batch size

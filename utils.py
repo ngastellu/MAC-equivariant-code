@@ -10,17 +10,13 @@ from torch.utils import data
 import time
 from torch.utils.data import Dataset
 import pickle
-import json
 import sys
 import tqdm
 from tqdm import tqdm as barthing
 from accuracy_metrics import *
 from models import *
 from Image_Processing_Utils import *
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
-
+from args_utils import max_epoch
 
 class build_dataset(Dataset):
     def __init__(self, configs):
@@ -101,6 +97,30 @@ def get_model(configs, dataDims):
 
     return model
 
+def load_checkpoint_training(configs, run_dir, model, optim):
+    cuda_avail = torch.cuda.is_available()
+    if cuda_avail:
+        device = torch.device('cuda:0')
+    else:
+        device = torch.device('cpu')
+
+    if configs.start_epoch > 0:
+        chk_path = run_dir / f'model-epoch_{configs.start_epoch}'
+        try:
+            torch.load(chk_path)
+        except FileNotFoundError as e:
+            print(f'[load_checkpoint_training] FileNotFoundError: {str(chk_path)}')
+            print(f'Loading most recent checkpoint instead.')
+
+    else: #negative start_epoch loads most recent checkpoint
+        latest_epoch = max_epoch(configs.experiment_name)
+        chk_path = run_dir / f'model-epoch_{latest_epoch}.pt'
+        checkpoint = torch.load(chk_path, map_location=device)
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optim.load_state_dict(checkpoint['optimizer_state_dict'])
+    return model, optim, latest_epoch+1
+
 
     #def init_weights(m):
     #    if (type(m) == nn.Conv2d) or (type(m) == MaskedConv2d):
@@ -122,23 +142,15 @@ def get_dataloaders(configs):
     return tr, te, dataDims
 
 def initialize_training(configs):
-    dist_url = "env://" # default
-
-               
-            
-    rank=0
-    world_size=1
-    dist.init_process_group(backend="nccl", init_method=configs.init_method, rank=rank, world_size=world_size)
-    
-    tr, te, dataDims = get_dataloaders(configs)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    *_, dataDims = get_dataloaders(configs)
     model = get_model(configs, dataDims)
-    model= model.to(rank)
-    ddp_model = DDP(model, device_ids=[rank],find_unused_parameters=True)
+    model= model.to(device)
     dataDims['conv field'] = configs.equivariant_layers + configs.vanilla_layers + configs.conv_size // 2
 
-    optimizer = optim.AdamW(ddp_model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
+    optimizer = optim.AdamW(model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
 
-    return ddp_model, optimizer, dataDims
+    return model, optimizer, dataDims
 
 def compute_loss(output, target):
     target = target[:,:1]
@@ -641,33 +653,3 @@ def log_input_stats(configs, experiment, input_analysis):
 
 def standardize(data):
     return (data - np.mean(data)) / np.sqrt(np.var(data))
-
-def parse_losses(logfile,nepochs=1000, log_frequency=2):
-    npts = nepochs // log_frequency # nb of logged loss entries
-    epochs = np.zeros(npts,dtype=int)
-    tr_loss = np.zeros(npts)
-    te_loss = np.zeros(npts)
-    with open(logfile) as fo:
-        k = 0
-        for line in fo:
-            line = line.strip()
-            if len(line) == 0:
-                continue # skip empty lines
-            split_line = line.split()
-            epochs[k] = int(split_line[0])
-            tr_loss[k] = float(split_line[1].split('(')[1][:-1]) # get rid of comma at end of number
-            te_loss[k] = float(split_line[4].split('(')[1][:-1]) # get rid of comma at end of number
-            k+=1
-    return epochs, tr_loss, te_loss
-
-def save_args(configs, run_type):
-    """Saves run arguments to JSON file to keep track of experimens/ensure reproducibility."""
-    outdir = Path(configs.experiment_name)
-    outdir.mkdir(exist_ok=True)
-    json_file = outdir / f'{run_type}_configs.json'
-    print(f'Saving args to {json_file}...',end = ' ', flush=True)
-    args_dict = vars(configs)
-
-    with open(json_file, 'w') as fo:
-        json.dump(args_dict, fo, indent=4)
-    print('Done!', flush=True)

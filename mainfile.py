@@ -5,9 +5,6 @@ import gc
 from time import perf_counter
 
 
-
-
-
 def main(configs):
     rundir = configs.experiment_name
     if not os.path.isdir(rundir):
@@ -46,6 +43,9 @@ def main(configs):
         converged = 0
         tr_err_hist = []
         te_err_hist = []
+        
+        if configs.start_epoch != 0:
+            model, optimizer, epoch = load_checkpoint_training(configs, rundir, model, optimizer)
 
         #if configs.auto_training_batch:
         ##    configs.training_batch_size, changed = get_training_batch_size(configs, model)  # confirm we can keep on at this batch size
@@ -64,11 +64,15 @@ def main(configs):
 
        # print(['tr and te',len(tr),len(te)])
     #    print([configs.training_batch_size])
-        logfile = os.path.join(rundir, configs.experiment_name + '.log')
+
+        if epoch == 1:
+            logfile = os.path.join(rundir, configs.experiment_name + '.log')
+        else:
+            logfile = os.path.join(rundir, configs.experiment_name + f'_restart_epoch_{epoch}.log')
         f = open(logfile, 'w')
 
         # ------- BEGIN TRAINING LOOP -------
-        print('******* Enetering training loop *******', flush=True)
+        print('******* Entering training loop *******', flush=True)
         while (epoch <= (configs.max_epochs + 1)) & (converged == 0):  # over a certain number of epochs or until converged
 
             print(f'\n[epoch #{epoch}] model_epoch (train)...', end=' ', flush=True)
