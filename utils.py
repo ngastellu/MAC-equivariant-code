@@ -98,6 +98,7 @@ def get_model(configs, dataDims):
     return model
 
 def load_checkpoint_training(configs, run_dir, model, optim):
+    run_dir = Path(run_dir)
     cuda_avail = torch.cuda.is_available()
     if cuda_avail:
         device = torch.device('cuda:0')
