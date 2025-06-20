@@ -122,24 +122,17 @@ def get_dataloaders(configs):
 
     return tr, te, dataDims
 
-def initialize_training(configs):
-    dist_url = "env://" # default
 
-               
-            
-    rank=0
-    world_size=1
-    dist.init_process_group(backend="nccl", init_method=configs.init_method, rank=rank, world_size=world_size)
-    
-    tr, te, dataDims = get_dataloaders(configs)
+def initialize_training(configs):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    *_, dataDims = get_dataloaders(configs)
     model = get_model(configs, dataDims)
-    model= model.to(rank)
-    ddp_model = DDP(model, device_ids=[rank],find_unused_parameters=True)
+    model= model.to(device)
     dataDims['conv field'] = configs.equivariant_layers + configs.vanilla_layers + configs.conv_size // 2
 
-    optimizer = optim.AdamW(ddp_model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
+    optimizer = optim.AdamW(model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
 
-    return ddp_model, optimizer, dataDims
+    return model, optimizer, dataDims
 
 def load_checkpoint_training(configs, run_dir, model, optim):
     cuda_avail = torch.cuda.is_available()
