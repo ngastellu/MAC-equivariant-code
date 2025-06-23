@@ -174,7 +174,11 @@ def load_checkpoint_training(configs, run_dir, model, optim):
         chk_path = run_dir / f'model-epoch_{latest_epoch}.pt'
         checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
     
-    model.load_state_dict(checkpoint['model_state_dict'])
+    try:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    except:
+        model_state_dict = {k.replace("module.", ""):v for k,v in checkpoint["model_state_dict"].items()}
+        model.load_state_dict[model_state_dict]
     optim.load_state_dict(checkpoint['optimizer_state_dict'])
     return model, optim, latest_epoch+1
 

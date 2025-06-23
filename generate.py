@@ -54,15 +54,15 @@ model.eval()
 model.to(device)
 
 if configs.epoch_chkpt > 0:
-    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{configs.epoch_chkpt}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{configs.epoch_chkpt}.pt'), map_location=device, weights_only=False)
 elif configs.epoch_chkpt == -1: # use checkpoint with lowest test loss
     ichkpt = best_epoch(model_name)
-    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device, weights_only=False)
 elif configs.epoch_chkpt == -2: # use most recent checkpoint
     ichkpt = max_epoch(model_name)
-    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device, weights_only=False)
 else:
-    checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}.pt'), map_location=device, weights_only=False)
 
 epoch = checkpoint['epoch']
 
@@ -73,7 +73,13 @@ for items in bc_old.items():
     s2 = s1[7:]
    
     bc_new[s2] = bc_new.pop(s1)
-model.load_state_dict(bc_new)
+
+try:
+    model.load_state_dict(bc_new)
+except:
+    bc_new_new = {k.replace("module.", ""):v for k,v in bc_new.items()}
+    model.load_state_dict(bc_new_new)
+    
 # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
