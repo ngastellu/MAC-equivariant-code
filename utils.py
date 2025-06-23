@@ -1,5 +1,3 @@
-# metrics to determine the performance of our learning algorithm
-#from comet_ml import Experiment
 from pathlib import Path
 import numpy as np
 import torch.nn.functional as F
@@ -61,7 +59,7 @@ class build_dataset(Dataset):
             'dataset length' : len(self.samples),
             'sample x dim' : self.samples.shape[-1] * configs.sample_outpaint_ratio,
             'sample y dim' : self.samples.shape[-2] * configs.sample_outpaint_ratio,
-            'conv field' : configs.conv_layers + configs.conv_size // 2
+            'conv field' : configs.equivariant_layers + configs.vanilla_layers + configs.conv_size // 2
 
         }
         a_file = open(f"{configs.experiment_name}/datadimsrelu.pkl", "wb")
@@ -99,16 +97,14 @@ def get_model(configs, dataDims):
         model = EquivariantPixelCNN(configs, dataDims) # gated, without blind spot
     else:
         sys.exit()
-
     return model
 
 
-    #def init_weights(m):
-    #    if (type(m) == nn.Conv2d) or (type(m) == MaskedConv2d):
-    #        #torch.nn.init.xavier_uniform_(m.weight)
-    #        torch.nn.init.kaiming_uniform_(m.weight, nonlinearity = 'relu')
-
-    #model.apply(init_weights) # apply xavier weights to 1x1 and 3x3 convolutions
+def init_weights(m):
+   if (type(m) == nn.Conv2d) or (type(m) == MaskedConv2d):
+       #torch.nn.init.xavier_uniform_(m.weight)
+       torch.nn.init.kaiming_uniform_(m.weight, nonlinearity = 'relu')
+   m.apply(init_weights) # apply xavier weights to 1x1 and 3x3 convolutions
 
 
 def get_dataloaders(configs):
@@ -122,22 +118,42 @@ def get_dataloaders(configs):
 
     return tr, te, dataDims
 
+
 def initialize_training(configs):
-    dist_url = "env://" # default
-                       
-    rank=0
-    world_size=1
-    dist.init_process_group(backend="nccl", init_method=configs.init_method, rank=rank, world_size=world_size)
-    
-    tr, te, dataDims = get_dataloaders(configs)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    *_, dataDims = get_dataloaders(configs)
     model = get_model(configs, dataDims)
-    model= model.to(rank)
-    ddp_model = DDP(model, device_ids=[rank],find_unused_parameters=True)
-    dataDims['conv field'] = configs.conv_layers + configs.conv_size // 2
+    model= model.to(device)
+    dataDims['conv field'] = configs.equivariant_layers + configs.vanilla_layers + configs.conv_size // 2
 
-    optimizer = optim.AdamW(ddp_model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
+    optimizer = optim.AdamW(model.parameters(),lr=configs.learning_rate, amsgrad=True)#optim.SGD(ddp_model.parameters(),momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.05, amsgrad=True)# optim.SGD(ddp_model.parameters(),lr=1e-1, momentum=0.9, nesterov=True)#optim.SGD(net.parameters(),lr=1e-4, momentum=0.9, nesterov=True)#optim.AdamW(ddp_model.parameters(),lr=0.01, amsgrad=True)
 
-    return ddp_model, optimizer, dataDims
+    return model, optimizer, dataDims
+
+def load_checkpoint_training(configs, run_dir, model, optim):
+    cuda_avail = torch.cuda.is_available()
+    if cuda_avail:
+
+        device = torch.device('cuda:0')
+    else:
+        device = torch.device('cpu')
+
+    if configs.start_epoch > 0:
+        chk_path = os.path.join(run_dir, f'model-epoch_{configs.start_epoch}')
+        try:
+            checkpoint = torch.load(chk_path)
+        except FileNotFoundError as e:
+            print(f'[load_checkpoint_training] FileNotFoundError: {str(chk_path)}')
+            print(f'Loading most recent checkpoint instead.')
+
+    else: #negative start_epoch loads most recent checkpoint
+        latest_epoch = max_epoch(configs.experiment_name)
+        chk_path = run_dir / f'model-epoch_{latest_epoch}.pt'
+        checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optim.load_state_dict(checkpoint['optimizer_state_dict'])
+    return model, optim, latest_epoch+1
 
 def load_checkpoint_training(configs, run_dir, model, optim):
     run_dir = Path(run_dir)
@@ -149,7 +165,7 @@ def load_checkpoint_training(configs, run_dir, model, optim):
     if configs.start_epoch > 0:
         chk_path = run_dir / f'model-epoch_{configs.start_epoch}'
         try:
-            torch.load(chk_path)
+            checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
         except FileNotFoundError as e:
             print(f'[load_checkpoint_training] FileNotFoundError: {str(chk_path)}')
             print(f'Loading most recent checkpoint instead.')
@@ -195,20 +211,15 @@ def get_training_batch_size(configs, model):
     return max(int(configs.training_batch_size * 0.25),1), int(configs.training_batch_size != training_batch_0)
 
 def model_epoch(configs, dataDims=None, trainData=None, model=None, optimizer=None, update_gradients=True,
-                    iteration_override=0):
-    # if configs.CUDA:
-    #     cuda.synchronize()  # synchronize for timing purposes
-    # time_tr = time.time()
-   # model=model.to(rank)
+                    iteration_override=0): 
     
-   # ddp_model = DDP(model, device_ids=[rank])
+    device = torch.device("cuda" if torch.cuda.is_available else "cpu")
+
     if configs.CUDA:
         cuda.synchronize()  # synchronize for timing purposes
     time_tr = time.time()
 
-
     err = []
-    rank=0
 
     if update_gradients:
         model.train(True)
@@ -220,58 +231,9 @@ def model_epoch(configs, dataDims=None, trainData=None, model=None, optimizer=No
         # if configs.CUDA:
         #     input = input.cuda(non_blocking=True)
 
-        target = (input * dataDims['classes']).to(rank)
+        target = (input * dataDims['classes']).to(device)
 
-        output = model(input.float().to(rank)) # reshape output from flat filters to channels * filters per channel
-        loss = compute_loss(output, target)
-
-        err.append(loss.data)  # record loss
-
-        if update_gradients:
-            optimizer.zero_grad()  # reset gradients from previous passes
-            loss.backward()  # back-propagation
-            optimizer.step()  # update parameters
-
-        if iteration_override != 0:
-            if i > iteration_override:
-                break
-
-    print(i)
-    if configs.CUDA:
-        cuda.synchronize()
-    time_tr = time.time() - time_tr
-
-    return err, time_tr
-
-
-def model_epoch_new(configs, dataDims = None, trainData = None, model=None, optimizer=None, update_gradients = True, iteration_override = 0):
-    # if configs.CUDA:
-    #     cuda.synchronize()  # synchronize for timing purposes
-    # time_tr = time.time()
-   # model=model.to(rank)
-    
-   # ddp_model = DDP(model, device_ids=[rank])
-    if configs.CUDA:
-        cuda.synchronize()  # synchronize for timing purposes
-    time_tr = time.time()
-
-
-    err = []
-    rank=0
-
-    if update_gradients:
-        model.train(True)
-    else:
-        model.eval()
-    print(['traindata',len(trainData)])
-    for i, input in enumerate(trainData):
-
-        # if configs.CUDA:
-        #     input = input.cuda(non_blocking=True)
-
-        target = (input * dataDims['classes']).to(rank)
-
-        output = model(input.float().to(rank)) # reshape output from flat filters to channels * filters per channel
+        output = model(input.float().to(device)) # reshape output from flat filters to channels * filters per channel
         loss = compute_loss(output, target)
 
         err.append(loss.data)  # record loss
@@ -480,28 +442,16 @@ def generate_samples_gated(configs, dataDims, model):
     return sample, time_ge
 
 
-def generation(configs, dataDims, model,epoch):
+def generation(configs, dataDims, model, epoch, run_dir):
     #err_te, time_te = test_net(model, te)  # clean run net
 
     sample, time_ge = generate_samples_gated(configs, dataDims, model)  # generate samples
 
-    np.save('samples/{}'.format(configs.experiment_name)+'epoch'+str(epoch), sample)
+    np.save(f'{run_dir}/samples/{configs.experiment_name}_epoch_{epoch}', sample)
 
     if len(sample) != 0:
         print('Generated samples')
-
-        #output_analysis = analyse_samples(sample)
-
-        #agreements = compute_accuracy(configs, dataDims, input_analysis, output_analysis)
-        total_agreement = 0
-       # for i, j, in enumerate(agreements.values()):
-        #    if np.isnan(j) != 1: # kill NaNs
-         #       total_agreement += float(j)
-
-        #total_agreement /= len(agreements)
-
-        #print('tot = {:.4f}; den={:.2f};time_ge={:.1f}s'.format(total_agreement, agreements['density'], time_ge))
-        return sample, time_ge#, agreements, output_analysis
+        return sample, time_ge
 
     else:
         print('Sample Generation Failed!')
@@ -619,27 +569,6 @@ def rolling_mean(input, run):
     return output
 
 
-# def get_comet_experiment(configs):
-#     if configs.comet:
-#         # Create an experiment with your api key
-#         experiment = Experiment(
-#             project_name="weld_net",
-#             workspace="mkilgour",
-#         )
-#         experiment.set_name(configs.experiment_name + str(configs.run_num))
-#         experiment.log_metrics(configs.__dict__)
-#         experiment.log_others(configs.__dict__)
-#         if configs.experiment_name[-1] == '_':
-#             tag = configs.experiment_name[:-1]
-#         else:
-#             tag = configs.experiment_name
-#         experiment.add_tag(tag)
-#     else:
-#         experiment = None
-#
-#     return experiment
-
-
 def superscale_image(image, f = 1):
     f = 2
     hi, wi = image.shape
@@ -666,4 +595,3 @@ def log_input_stats(configs, experiment, input_analysis):
 
 def standardize(data):
     return (data - np.mean(data)) / np.sqrt(np.var(data))
-

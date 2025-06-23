@@ -49,28 +49,22 @@ a_file = open(os.path.join(model_name, "datadimsrelu.pkl"), "rb")
 dataDims = pickle. load(a_file)
 
 model = EquivariantPixelCNN(configs,dataDims)
-device = torch.device('cuda:0')
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.eval()
-model.to(torch.device("cuda:0"))
+model.to(device)
 
 if configs.epoch_chkpt > 0:
     checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{configs.epoch_chkpt}.pt'), map_location=device)
-elif configs.epoch_chkpt == -1:
-    # find checkpoint with lowest test loss
+elif configs.epoch_chkpt == -1: # use checkpoint with lowest test loss
     ichkpt = best_epoch(model_name)
-    print(f'Loading model from {model_name}/model-epoch_{ichkpt}.pt')
     checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
-elif configs.epoch_chkpt == -2:
-    # load most recently saved model (in case training didnt finish)
+elif configs.epoch_chkpt == -2: # use most recent checkpoint
     ichkpt = max_epoch(model_name)
-    print(f'Loading model from {model_name}/model-epoch_{ichkpt}.pt')
     checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
 else:
-    checkpoint = torch.load(os.path.join(model_name, f'model-{model_name}.pt'), map_location=device)
+    checkpoint = torch.load(os.path.join(model_name, f'model-amorphous-{model_name}.pt'), map_location=device)
 
 epoch = checkpoint['epoch']
-
-
 
 bc_old=checkpoint['model_state_dict']
 bc_new=bc_old.copy()
@@ -240,12 +234,5 @@ elif configs.sample_generation_mode == 'parallel':
 
             for k in range(dataDims['channels']):
                 sample[image, k, :, :] = sample_batch[:, k, (configs.boundary_layers + 1) * dataDims['conv field'] + 1:, (configs.boundary_layers + 1) * dataDims['conv field']:-((configs.boundary_layers + 1) * dataDims['conv field'])] * dataDims['classes'] - 1  # convert back to input space, +1 in y dim to get rid of first row
-
-
-   
-
-
-
-
-           
+ 
             np.save(os.path.join(configs.training_run_name,'samples',f'{configs.experiment_name}_epoch-{epoch}.npy'), sample.cpu())

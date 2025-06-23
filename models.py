@@ -76,7 +76,8 @@ class EquivariantMaskedConv2d_90(nn.Module):
         self.r2_act = gspaces.Rot2dOnR2(N=4)
         self.register_buffer('mask', mask)
 
-    def forward(self, input, k):
+    def forward(self, input):
+        print('***** In EquivariantMaskedConv2d_90.forward *****',flush=True)
         # Expand the weights to get the convolution kernels
         expanded_weights, expanded_bias = self.conv.expand_parameters()
         # print(f'expanded_bias.shape = {expanded_bias.shape}', flush=True)
@@ -142,7 +143,9 @@ class EquivariantPixelCNN(nn.Module):
         super().__init__()
         self.act_func = configs.activation_function
         self.filters = configs.conv_filters
-        self.layers = configs.conv_layers
+        self.init_layer_type = configs.init_filter_type
+        self.nb_equivariant_layers = configs.equivariant_layers
+        self.nb_vanilla_layers = configs.vanilla_layers
         self.activation = Activation(self.act_func)
         self.nrot = configs.nrot # number of rotations of convolutional filters 
 
@@ -152,9 +155,6 @@ class EquivariantPixelCNN(nn.Module):
         outmaps = dataDims['classes'] + 1
 
         self.fc_depth=configs.fc_depth
-        # f_in = (np.ones(self.layers+ 1) * self.filters).astype(int)
-        # f_in[0        ] = self.filters*4
-        # f_out = (np.ones(self.layers + 1) * self.filters).astype(int)
 
         # Define the rotation-equivariant group: C4 (4-fold rotational symmetry)
         self.r2_act = gspaces.Rot2dOnR2(N=self.nrot)  # Rotational equivariance with 4 angles
@@ -165,22 +165,40 @@ class EquivariantPixelCNN(nn.Module):
         self.output_type = e2nn.FieldType(self.r2_act, outmaps * [self.r2_act.trivial_repr])
 
         # Initial masked convolution (Type 'A')
-        if self.nrot == 2:
-            self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
-            self.conv_layers = nn.ModuleList([
-                EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
-                for _ in range(self.layers)
+        self.initial_conv = MaskedConv2d('A', channels ,self.filters * 2, kernel_size, padding=padding, bias=True)
+
+
+        # Hidden masked convolutions (Type 'B')
+        if self.nb_vanilla_layers > 0:
+            self.vanilla_layers = nn.ModuleList([MaskedConv2d('B', self.filters*2, self.filters*2, kernel_size, padding=padding, bias=True)
+                                                for _ in range(self.nb_vanilla_layers)
             ])
-        else: # nrot = 4
-            self.hidden_type2 = e2nn.FieldType(self.r2_act, int(self.filters/2) * [self.r2_act.regular_repr])
-            self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
-            self.conv_layers = nn.ModuleList([
-                EquivariantMaskedConv2d_90('B', self.hidden_type2, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
-                for _ in range(self.layers)
-        ])
-#  og1workedelongated      self.conv_layers = nn.ModuleList(
-#            [MaskedConv2d('B', f_in[i], f_out[i] , kernel_size, padding) for i in range(self.layers)]
-#        )
+
+        if self.nb_equivariant_layers > 0:
+            if self.nrot == 2:
+                self.equivariant_layers = nn.ModuleList([
+                    EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
+                    for _ in range(self.nb_equivariant_layers)
+                ])
+            else: # nrot = 4
+                self.hidden_type2 = e2nn.FieldType(self.r2_act, int(self.filters/2) * [self.r2_act.regular_repr])
+                self.equivariant_layers = nn.ModuleList([
+                    EquivariantMaskedConv2d_90('B', self.hidden_type2, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
+                    for _ in range(self.nb_equivariant_layers)
+                ])
+
+        if self.nb_equivariant_layers == 0:
+            self.layers = self.vanilla_layers
+        
+        elif self.nb_vanilla_layers == 0:
+            self.layers = self.equivariant_layers
+        
+        else:
+            if self.init_layer_type == 'vanilla':
+                self.layers = nn.ModuleList(self.vanilla_layers + self.equivariant_layers)
+            elif self.init_layer_type == 'equivariant':
+                self.layers = nn.ModuleList(self.equivariant_layers + self.vanilla_layers)
+
         if configs.fc_norm is None:
             self.fc_norm = nn.Identity()
         elif configs.fc_norm == 'batch':
@@ -188,41 +206,31 @@ class EquivariantPixelCNN(nn.Module):
         else:
             print(configs.fc_norm + ' is not an implemented norm')
             sys.exit()
-        # Hidden masked convolutions (Type 'B')
-        # self.conv_layers = nn.ModuleList([
-        #     EquivariantMaskedConv2d('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding)
-        #     for _ in range(self.layers)
-        # ])
+        
         self.fc_dropout = nn.Dropout(configs.fc_dropout_probability)
+        
         # Fully connected layers
-#og1        self.fc1 = nn.Conv2d(f_out[-1], self.fc_depth, kernel_size=(1,1), bias=True)  # add skip connections
         self.fc1 = nn.Conv2d(self.filters*2, self.fc_depth, kernel_size=(1,1), bias=True)
         self.fc2 = nn.Conv2d(self.fc_depth, outmaps * channels, kernel_size=(1,1), bias=True) # gated activation cuts filters by 2
 
 
     def forward(self, x):
-       # x = e2nn.GeometricTensor(x, self.input_type)  # Convert to an equivariant tensor
-       # print( self.initial_conv(x))
-        x = self.initial_conv(x,0)  # Initial masked convolution
+        print(f'--------- initial_conv ---------',flush=True)
+        x = self.initial_conv(x)  # Initial masked convolution
 
         if isinstance(x, e2nn.GeometricTensor):
            x = x.tensor  # Extract tensor if it's a GeometricTensor
-     #   print([x.shape,'1'])
         x = self.activation(x)
 
-        for k, layer in enumerate(self.conv_layers):
-            x = layer(x,k+1)
-            x = x.tensor
+        for layer in self.layers:
+            x = layer(x)
+            if isinstance(x, e2nn.GeometricTensor):
+                x = x.tensor
             x = self.activation(x)
 
-       # x = x.tensor
-       #  print(self.filters * [self.r2_act.regular_repr])
-       # 
         x = self.fc1(x)
         x = self.fc_norm(x)
-      #  x = x.tensor
         x = self.activation(x)
         x = self.fc_dropout(x)
         x = self.fc2(x)
-        # print(x.shape)
         return x  # Convert back to a standard tensor

@@ -10,19 +10,12 @@ def main(configs):
     if not os.path.isdir(rundir):
         os.makedirs(rundir)
 
-    converged = 0
-    epoch = 1
-    tr_err_hist = []
-    te_err_hist = []
-# experiment = get_comet_experiment(configs)
+   # experiment = get_comet_experiment(configs)
     print(f'initialize_training...', end=' ', flush=True)
     start = perf_counter()
     model, optimizer, dataDims = initialize_training(configs)
     end = perf_counter()
     print(f'Done! [{end-start} seconds]', flush=True)
-
-    if configs.start_epoch != 0:
-        model, optimizer, epoch = load_checkpoint_training(configs, rundir, model, optimizer)
     #model.cpu()
 
 
@@ -42,10 +35,17 @@ def main(configs):
 
     ## BEGIN TRAINING/GENERATION
     if configs.max_epochs == 0:  # no training, just samples
-        sample, time_ge = generation(configs, dataDims, model)
+        sample, time_ge = generation(configs, dataDims, model, rundir)
        # log_generation_stats(experiment, sample, agreements, output_analysis)
 
     else:  # train it AND make samples!
+        epoch = 1
+        converged = 0
+        tr_err_hist = []
+        te_err_hist = []
+        
+        if configs.start_epoch != 0:
+            model, optimizer, epoch = load_checkpoint_training(configs, rundir, model, optimizer)
 
         #if configs.auto_training_batch:
         ##    configs.training_batch_size, changed = get_training_batch_size(configs, model)  # confirm we can keep on at this batch size
@@ -94,17 +94,17 @@ def main(configs):
                 f.write(str(epoch) + " " + str(torch.mean(torch.stack(err_tr))) + " " + str(time_tr) + " " + str(torch.mean(torch.stack(err_te)))+'\n')
 
             if epoch % configs.generation_period == 0:
-                sample, time_ge= generation(configs, dataDims, model,epoch)
+                sample, time_ge= generation(configs, dataDims, model, epoch, rundir)
                # log_generation_stats(configs, epoch, experiment, sample, agreements, output_analysis)
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-amorphous-gen-{epoch}.pt'))
-                sample, time_ge = generation(configs, dataDims, model,epoch)
+                    'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-gen_{epoch}.pt')) #save model whenever we use it to generate AMC
+                sample, time_ge = generation(configs, dataDims, model, epoch, rundir)
 
 
 
-            if epoch%100==0:
+            if epoch%100==0: #save model every 100 epochs no matter what
                 print('Saving model...', end=' ', flush=True)
                 start = perf_counter()
                 torch.save({
@@ -124,6 +124,6 @@ def main(configs):
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-amorphous-{configs.experiment_name}.pt'))
-    #    sample, time_ge = generation(configs, dataDims, model,epoch)
+        sample, time_ge = generation(configs, dataDims, model, epoch, rundir)
        # log_generation_stats(configs, epoch, experiment, sample, agreements, output_analysis)
     print('finished!')
