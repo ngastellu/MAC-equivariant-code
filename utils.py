@@ -1,5 +1,3 @@
-# metrics to determine the performance of our learning algorithm
-#from comet_ml import Experiment
 from pathlib import Path
 import numpy as np
 import torch.nn.functional as F
@@ -99,16 +97,14 @@ def get_model(configs, dataDims):
         model = EquivariantPixelCNN(configs, dataDims) # gated, without blind spot
     else:
         sys.exit()
-
     return model
 
 
-    #def init_weights(m):
-    #    if (type(m) == nn.Conv2d) or (type(m) == MaskedConv2d):
-    #        #torch.nn.init.xavier_uniform_(m.weight)
-    #        torch.nn.init.kaiming_uniform_(m.weight, nonlinearity = 'relu')
-
-    #model.apply(init_weights) # apply xavier weights to 1x1 and 3x3 convolutions
+def init_weights(m):
+   if (type(m) == nn.Conv2d) or (type(m) == MaskedConv2d):
+       #torch.nn.init.xavier_uniform_(m.weight)
+       torch.nn.init.kaiming_uniform_(m.weight, nonlinearity = 'relu')
+   m.apply(init_weights) # apply xavier weights to 1x1 and 3x3 convolutions
 
 
 def get_dataloaders(configs):
@@ -145,7 +141,7 @@ def load_checkpoint_training(configs, run_dir, model, optim):
     if configs.start_epoch > 0:
         chk_path = os.path.join(run_dir, f'model-epoch_{configs.start_epoch}')
         try:
-            torch.load(chk_path)
+            checkpoint = torch.load(chk_path)
         except FileNotFoundError as e:
             print(f'[load_checkpoint_training] FileNotFoundError: {str(chk_path)}')
             print(f'Loading most recent checkpoint instead.')
@@ -189,20 +185,15 @@ def get_training_batch_size(configs, model):
     return max(int(configs.training_batch_size * 0.25),1), int(configs.training_batch_size != training_batch_0)
 
 def model_epoch(configs, dataDims=None, trainData=None, model=None, optimizer=None, update_gradients=True,
-                    iteration_override=0):
-    # if configs.CUDA:
-    #     cuda.synchronize()  # synchronize for timing purposes
-    # time_tr = time.time()
-   # model=model.to(rank)
+                    iteration_override=0): 
     
-   # ddp_model = DDP(model, device_ids=[rank])
+    device = torch.device("cuda" if torch.cuda.is_available else "cpu")
+
     if configs.CUDA:
         cuda.synchronize()  # synchronize for timing purposes
     time_tr = time.time()
 
-
     err = []
-    rank=0
 
     if update_gradients:
         model.train(True)
@@ -214,58 +205,9 @@ def model_epoch(configs, dataDims=None, trainData=None, model=None, optimizer=No
         # if configs.CUDA:
         #     input = input.cuda(non_blocking=True)
 
-        target = (input * dataDims['classes']).to(rank)
+        target = (input * dataDims['classes']).to(device)
 
-        output = model(input.float().to(rank)) # reshape output from flat filters to channels * filters per channel
-        loss = compute_loss(output, target)
-
-        err.append(loss.data)  # record loss
-
-        if update_gradients:
-            optimizer.zero_grad()  # reset gradients from previous passes
-            loss.backward()  # back-propagation
-            optimizer.step()  # update parameters
-
-        if iteration_override != 0:
-            if i > iteration_override:
-                break
-
-    print(i)
-    if configs.CUDA:
-        cuda.synchronize()
-    time_tr = time.time() - time_tr
-
-    return err, time_tr
-
-
-def model_epoch_new(configs, dataDims = None, trainData = None, model=None, optimizer=None, update_gradients = True, iteration_override = 0):
-    # if configs.CUDA:
-    #     cuda.synchronize()  # synchronize for timing purposes
-    # time_tr = time.time()
-   # model=model.to(rank)
-    
-   # ddp_model = DDP(model, device_ids=[rank])
-    if configs.CUDA:
-        cuda.synchronize()  # synchronize for timing purposes
-    time_tr = time.time()
-
-
-    err = []
-    rank=0
-
-    if update_gradients:
-        model.train(True)
-    else:
-        model.eval()
-    print(['traindata',len(trainData)])
-    for i, input in enumerate(trainData):
-
-        # if configs.CUDA:
-        #     input = input.cuda(non_blocking=True)
-
-        target = (input * dataDims['classes']).to(rank)
-
-        output = model(input.float().to(rank)) # reshape output from flat filters to channels * filters per channel
+        output = model(input.float().to(device)) # reshape output from flat filters to channels * filters per channel
         loss = compute_loss(output, target)
 
         err.append(loss.data)  # record loss
@@ -474,28 +416,16 @@ def generate_samples_gated(configs, dataDims, model):
     return sample, time_ge
 
 
-def generation(configs, dataDims, model,epoch):
+def generation(configs, dataDims, model, epoch, run_dir):
     #err_te, time_te = test_net(model, te)  # clean run net
 
     sample, time_ge = generate_samples_gated(configs, dataDims, model)  # generate samples
 
-    np.save('samples/{}'.format(configs.experiment_name)+'epoch'+str(epoch), sample)
+    np.save(f'{run_dir}/samples/{configs.experiment_name}_epoch_{epoch}', sample)
 
     if len(sample) != 0:
         print('Generated samples')
-
-        #output_analysis = analyse_samples(sample)
-
-        #agreements = compute_accuracy(configs, dataDims, input_analysis, output_analysis)
-        total_agreement = 0
-       # for i, j, in enumerate(agreements.values()):
-        #    if np.isnan(j) != 1: # kill NaNs
-         #       total_agreement += float(j)
-
-        #total_agreement /= len(agreements)
-
-        #print('tot = {:.4f}; den={:.2f};time_ge={:.1f}s'.format(total_agreement, agreements['density'], time_ge))
-        return sample, time_ge#, agreements, output_analysis
+        return sample, time_ge
 
     else:
         print('Sample Generation Failed!')
@@ -613,27 +543,6 @@ def rolling_mean(input, run):
     return output
 
 
-# def get_comet_experiment(configs):
-#     if configs.comet:
-#         # Create an experiment with your api key
-#         experiment = Experiment(
-#             project_name="weld_net",
-#             workspace="mkilgour",
-#         )
-#         experiment.set_name(configs.experiment_name + str(configs.run_num))
-#         experiment.log_metrics(configs.__dict__)
-#         experiment.log_others(configs.__dict__)
-#         if configs.experiment_name[-1] == '_':
-#             tag = configs.experiment_name[:-1]
-#         else:
-#             tag = configs.experiment_name
-#         experiment.add_tag(tag)
-#     else:
-#         experiment = None
-#
-#     return experiment
-
-
 def superscale_image(image, f = 1):
     f = 2
     hi, wi = image.shape
@@ -660,21 +569,3 @@ def log_input_stats(configs, experiment, input_analysis):
 
 def standardize(data):
     return (data - np.mean(data)) / np.sqrt(np.var(data))
-
-def parse_losses(logfile,nepochs=1000, log_frequency=2):
-    npts = nepochs // log_frequency # nb of logged loss entries
-    epochs = np.zeros(npts,dtype=int)
-    tr_loss = np.zeros(npts)
-    te_loss = np.zeros(npts)
-    with open(logfile) as fo:
-        k = 0
-        for line in fo:
-            line = line.strip()
-            if len(line) == 0:
-                continue # skip empty lines
-            split_line = line.split()
-            epochs[k] = int(split_line[0])
-            tr_loss[k] = float(split_line[1].split('(')[1][:-1]) # get rid of comma at end of number
-            te_loss[k] = float(split_line[4].split('(')[1][:-1]) # get rid of comma at end of number
-            k+=1
-    return epochs, tr_loss, te_loss

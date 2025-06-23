@@ -8,13 +8,15 @@ from args_utils import save_args, add_bool_arg
 parser = argparse.ArgumentParser()
 parser.add_argument('--run_num', type = int, default = 0)
 parser.add_argument('--experiment_name', type = str, default = 'testing')
-# model architecture
+
+# *** Model architecture ***
 parser.add_argument('--model', type = str, default = 'gated1') # model architecture -- 'gated1'
 parser.add_argument('--fc_depth', type = int, default = 128) # number of neurons for final fully connected layers
 parser.add_argument('--init_conv_size', type=int, default= 3) # size of the initial convolutional window # ODD NUMBER
 parser.add_argument('--conv_filters', type = int, default = 40) # number of filters per gated convolutional layer
 parser.add_argument('--init_conv_filters', type=int, default = 40) # number of filters for the first convolutional layer  # MUST BE THE SAME AS 'conv_filters'
 parser.add_argument('--conv_size', type = int, default = 3) # ODD NUMBER
+parser.add_argument('--init_layer_type', type=str, default='vanilla', choices=['vanilla', 'equivariant'])
 parser.add_argument('--equivariant_layers', type = int, default = 60) # number of equivariant layers in the convnet - should be larger than the correlation length
 parser.add_argument('--vanilla_layers', type = int, default = 60) # number of equivariant layers in the convnet - should be larger than the correlation length
 parser.add_argument('--dilation', type = int, default = 1) # must be 1 - greater than 1 is deprecated
@@ -33,7 +35,7 @@ parser.add_argument('--nrot', type=int, default=2, choices=[2,4]) #
 # # parser.add_argument('--init_conditioning_filters', type=int, default=20) # number of filters for optional conditioning layers
 # parser.add_argument('-l', '--generation_conditions', nargs='+', default=[0.23, 0.22]) # conditions used to generate samples at runtime
 
-# training parameters
+# *** Training parameters ***
 parser.add_argument('--start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--training_dataset', type = str, default = 'amorphous') # name of training dataset - 'fake welds', 'welds 1'

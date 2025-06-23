@@ -10,7 +10,7 @@ import argparse
 import json
 from utils import parse_losses
 from glob import glob
-from args_utils import save_args, max_epoch, best_epoch, load_training_args, add_training_args, add_bool_arg
+from args_utils import save_args, max_epoch, best_epoch, add_training_args, add_bool_arg
 
 
 parser = argparse.ArgumentParser()
@@ -61,7 +61,7 @@ if configs.epoch_chkpt > 0:
 elif configs.epoch_chkpt == -1: # use checkpoint with lowest test loss
     ichkpt = best_epoch(model_name)
     checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
-elif configs.epoch_ckhpt == -2: # use most recent checkpoint
+elif configs.epoch_chkpt == -2: # use most recent checkpoint
     ichkpt = max_epoch(model_name)
     checkpoint = torch.load(os.path.join(model_name, f'model-epoch_{ichkpt}.pt'), map_location=device)
 else:

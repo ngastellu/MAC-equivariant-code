@@ -38,7 +38,7 @@ def main(configs):
 
     ## BEGIN TRAINING/GENERATION
     if configs.max_epochs == 0:  # no training, just samples
-        sample, time_ge = generation(configs, dataDims, model)
+        sample, time_ge = generation(configs, dataDims, model, rundir)
        # log_generation_stats(experiment, sample, agreements, output_analysis)
 
     else:  # train it AND make samples!
@@ -97,13 +97,13 @@ def main(configs):
                 f.write(str(epoch) + " " + str(torch.mean(torch.stack(err_tr))) + " " + str(time_tr) + " " + str(torch.mean(torch.stack(err_te)))+'\n')
 
             if epoch % configs.generation_period == 0:
-                sample, time_ge= generation(configs, dataDims, model,epoch)
+                sample, time_ge= generation(configs, dataDims, model, epoch, rundir)
                # log_generation_stats(configs, epoch, experiment, sample, agreements, output_analysis)
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-gen_{epoch}.pt'))
-                sample, time_ge = generation(configs, dataDims, model,epoch) #save model whenever we use it to generate AMC
+                    'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-gen_{epoch}.pt')) #save model whenever we use it to generate AMC
+                sample, time_ge = generation(configs, dataDims, model, epoch, rundir)
 
 
 
@@ -127,6 +127,6 @@ def main(configs):
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict()},os.path.join(rundir, f'model-amorphous-{configs.experiment_name}.pt'))
-    #    sample, time_ge = generation(configs, dataDims, model,epoch)
+        sample, time_ge = generation(configs, dataDims, model, epoch, rundir)
        # log_generation_stats(configs, epoch, experiment, sample, agreements, output_analysis)
     print('finished!')
