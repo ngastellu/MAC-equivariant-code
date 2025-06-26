@@ -7,7 +7,7 @@ import subprocess as sbp
 import os
 
 
-def get_nepochs(logfile):
+def get_max_epoch(logfile):
     print('LOGFILE = ', logfile)
     cmd = ['tail', '-n', '1', logfile]
     cmd_out =  sbp.run(cmd,stdout=sbp.PIPE)
@@ -15,10 +15,8 @@ def get_nepochs(logfile):
     print(f'LOGFILE =  {logfile} -- max epoch = {max_epoch}')
     return max_epoch
     
-    
 
 def parse_losses(logfile,max_epoch=1000, log_frequency=2):
-
     with open(logfile) as fo:
         epoch0 = int(fo.readline().split()[0])
         npts = 1 + (max_epoch - epoch0) // log_frequency # nb of logged loss entries
@@ -40,7 +38,42 @@ def parse_losses(logfile,max_epoch=1000, log_frequency=2):
     return epochs, tr_loss, te_loss
 
 
-def plot_losses(epochs, tr_loss, te_loss, hyperparam_name, hyperparam_val, show=True, plt_objs=None,c_tr=None,c_te=None):
+def concatenate_losses(epochs, tr_losses, te_losses):
+    epoch1, epoch2 = epochs
+    tr_loss1, tr_loss2 = tr_losses
+    tr_loss1, tr_loss2 = tr_losses
+    te_loss1, te_loss2 = te_losses
+
+    first_epoch2 = epoch2[0]
+    last_epoch1 = epoch1[-1]
+    
+    if first_epoch2 > last_epoch1:
+        epochs = np.hstack(epochs)
+        tr_losses = np.hstack(tr_losses)
+        te_losses = np.hstack(te_losses)
+    else:
+        cut_ind = 1 + (epoch1 < first_epoch2).nonzero()[0][-1]
+        epochs = np.hstack([epoch1[:cut_ind], epoch2])
+        tr_losses = np.hstack([tr_loss1[:cut_ind], tr_loss2])
+        te_losses = np.hstack([te_loss1[:cut_ind], te_loss2])
+    return epochs, tr_losses, te_losses
+
+
+
+def parse_multiple_losses(logfiles, log_frequency=2):
+    max_epochs0 = get_max_epoch(logfiles[0])
+    epochs, tr_loss, te_loss = parse_losses(logfiles[0], max_epochs0, log_frequency)
+    for logfile in logfiles[1:]:
+        max_epoch = get_max_epoch(logfile)
+        epochs1, tr_loss1, te_loss1 = parse_losses(logfile, max_epoch=max_epoch, log_frequency=log_frequency)
+        all_epochs = [epochs, epochs1]
+        all_tr_loss = [tr_loss, tr_loss1]
+        all_te_loss = [te_loss, te_loss1]
+        epochs, tr_loss, te_loss = concatenate_losses(all_epochs, all_tr_loss, all_te_loss)
+    return epochs, tr_loss, te_loss
+
+
+def plot_losses(epochs, tr_loss, te_loss, hyperparam_name=None, hyperparam_val=None, show=True, plt_objs=None,c_tr=None,c_te=None):
     if plt_objs is None:
         fig, ax = plt.subplots()
     else:
@@ -51,7 +84,8 @@ def plot_losses(epochs, tr_loss, te_loss, hyperparam_name, hyperparam_val, show=
     ax.set_ylabel('Loss')
     ax.set_xlim([-1,np.max(epochs) + 10])
     ax.set_ylim([0,max(np.max(tr_loss),np.max(te_loss))])
-    ax.set_title(f'{hyperparam_name} = {hyperparam_val}')
+    if hyperparam_name is not None and hyperparam_val is not None:
+        ax.set_title(f'{hyperparam_name} = {hyperparam_val}')
     ax.legend()
     if show:
         # plt.savefig(f'/Users/nico/Desktop/figures_worth_saving/equivariant_MAC/losses_{hyperparam_name}_{hyperparam_val}.png')
@@ -76,7 +110,7 @@ if __name__ == "__main__":
         # hp_name = '_'.join(filename.split('_')[:-1])
         # hp_val = '.'.join(filename.split('_')[-1].split('.')[:-1])
 
-        nepochs = get_nepochs(logfile)
+        nepochs = get_max_epoch(logfile)
         epochs, tr_loss, te_loss = parse_losses(logfile,max_epoch=nepochs)
         imin_tr = np.argmin(tr_loss)
         imin_te = np.argmin(te_loss)
