@@ -1,3 +1,4 @@
+import itertools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -143,7 +144,7 @@ class EquivariantPixelCNN(nn.Module):
         super().__init__()
         self.act_func = configs.activation_function
         self.filters = configs.conv_filters
-        self.init_layer_type = configs.init_filter_type
+        self.init_layer_type = configs.init_layer_type
         self.nb_equivariant_layers = configs.equivariant_layers
         self.nb_vanilla_layers = configs.vanilla_layers
         self.activation = Activation(self.act_func)
@@ -165,39 +166,30 @@ class EquivariantPixelCNN(nn.Module):
         self.output_type = e2nn.FieldType(self.r2_act, outmaps * [self.r2_act.trivial_repr])
 
         # Initial masked convolution (Type 'A')
-        self.initial_conv = MaskedConv2d('A', channels ,self.filters * 2, kernel_size, padding=padding, bias=True)
-
+        if self.init_layer_type == 'vanilla':
+            self.initial_conv = MaskedConv2d('A', channels ,self.filters * 2, kernel_size, padding=padding, bias=True)
+        else:
+            if self.nrot == 2:
+                self.initial_conv = EquivariantMaskedConv2d_180('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False)
+            else:
+                self.initial_conv = EquivariantMaskedConv2d_90('A', self.input_type, self.hidden_type, kernel_size, padding=padding,bias=False,filters=self.filters)
 
         # Hidden masked convolutions (Type 'B')
-        if self.nb_vanilla_layers > 0:
-            self.vanilla_layers = nn.ModuleList([MaskedConv2d('B', self.filters*2, self.filters*2, kernel_size, padding=padding, bias=True)
-                                                for _ in range(self.nb_vanilla_layers)
+        self.vanilla_layers = nn.ModuleList([MaskedConv2d('B', self.filters*2, self.filters*2, kernel_size, padding=padding, bias=True)
+                                            for _ in range(self.nb_vanilla_layers)
+        ])
+
+        if self.nrot == 2:
+            self.equivariant_layers = nn.ModuleList([
+                EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
+                for _ in range(self.nb_equivariant_layers)
             ])
-
-        if self.nb_equivariant_layers > 0:
-            if self.nrot == 2:
-                self.equivariant_layers = nn.ModuleList([
-                    EquivariantMaskedConv2d_180('B', self.hidden_type, self.hidden_type, kernel_size, padding=padding,bias=True)
-                    for _ in range(self.nb_equivariant_layers)
-                ])
-            else: # nrot = 4
-                self.hidden_type2 = e2nn.FieldType(self.r2_act, int(self.filters/2) * [self.r2_act.regular_repr])
-                self.equivariant_layers = nn.ModuleList([
-                    EquivariantMaskedConv2d_90('B', self.hidden_type2, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
-                    for _ in range(self.nb_equivariant_layers)
-                ])
-
-        if self.nb_equivariant_layers == 0:
-            self.layers = self.vanilla_layers
-        
-        elif self.nb_vanilla_layers == 0:
-            self.layers = self.equivariant_layers
-        
-        else:
-            if self.init_layer_type == 'vanilla':
-                self.layers = nn.ModuleList(self.vanilla_layers + self.equivariant_layers)
-            elif self.init_layer_type == 'equivariant':
-                self.layers = nn.ModuleList(self.equivariant_layers + self.vanilla_layers)
+        else: # nrot = 4
+            self.hidden_type2 = e2nn.FieldType(self.r2_act, int(self.filters/2) * [self.r2_act.regular_repr])
+            self.equivariant_layers = nn.ModuleList([
+                EquivariantMaskedConv2d_90('B', self.hidden_type2, self.hidden_type, kernel_size, padding=padding,bias=True, filters=self.filters)
+                for _ in range(self.nb_equivariant_layers)
+            ])
 
         if configs.fc_norm is None:
             self.fc_norm = nn.Identity()
@@ -222,7 +214,13 @@ class EquivariantPixelCNN(nn.Module):
            x = x.tensor  # Extract tensor if it's a GeometricTensor
         x = self.activation(x)
 
-        for layer in self.layers:
+        if self.init_layer_type == 'vanilla':
+            layers1, layers2 = self.vanilla_layers, self.equivariant_layers
+        else:
+            layers1, layers2 = self.equivariant_layers, self.vanilla_layers
+
+
+        for layer in itertools.chain(layers1, layers2):
             x = layer(x)
             if isinstance(x, e2nn.GeometricTensor):
                 x = x.tensor
