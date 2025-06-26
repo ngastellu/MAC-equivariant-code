@@ -57,6 +57,7 @@ parser.add_argument('--sample_batch_size', type = int, default = 1) # maximum sa
 parser.add_argument('--generation_period', type = int, default = 1000) # how often to run (expensive) generation during training
 # utility of higher batch sizes for parallel generation is only realized with extremely large samples
 parser.add_argument('--n_samples', type = int, default = 1) # number of samples to generate
+parser.add_argument('--softmax_temp', type = float, default = 1.0)
 
 add_bool_arg(parser, 'CUDA', default=True)
 add_bool_arg(parser, 'comet', default=False)
