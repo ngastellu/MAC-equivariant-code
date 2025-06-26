@@ -43,8 +43,11 @@ def add_bool_arg(parser, name, default=False):
 
 def save_args(configs, run_type):
     """Saves run arguments to JSON file to keep track of experimens/ensure reproducibility."""
-    outdir = Path(configs.experiment_name)
-    outdir.mkdir(exist_ok=True)
+    if run_type == 'train':
+        outdir = Path(configs.experiment_name)
+        outdir.mkdir(exist_ok=True)
+    elif run_type == 'generate':
+        outdir = Path(configs.training_run_name)
     json_file = outdir / f'{run_type}_configs.json'
     print(f'Saving args to {json_file}...',end = ' ', flush=True)
     args_dict = vars(configs)
@@ -69,4 +72,8 @@ def parse_losses(logfile,nepochs=1000, log_frequency=2):
             tr_loss[k] = float(split_line[1].split('(')[1][:-1]) # get rid of comma at end of number
             te_loss[k] = float(split_line[4].split('(')[1][:-1]) # get rid of comma at end of number
             k+=1
-    return epochs, tr_loss, te_loss
+    
+    return keep_nonzero(epochs), keep_nonzero(tr_loss), keep_nonzero(te_loss)
+
+def keep_nonzero(arr):
+    return arr[arr != 0]
