@@ -1,14 +1,14 @@
 from utils import *
 import torch
 from torchsummary import summary
-import gc
 from time import perf_counter
+from args_utils import parse_losses
 
 
 def main(configs):
     rundir = configs.experiment_name
     if not os.path.isdir(rundir):
-        os.makedirs(rundir)
+        os.makedirs(f'{rundir}/samples', exist_ok=True)
 
    # experiment = get_comet_experiment(configs)
     print(f'initialize_training...', end=' ', flush=True)
@@ -46,6 +46,13 @@ def main(configs):
         
         if configs.start_epoch != 0:
             model, optimizer, epoch = load_checkpoint_training(configs, rundir, model, optimizer)
+            prev_logfile = Path(f"{rundir}/{configs.experiment_name}.log")
+
+            # get previous losses; necessary for proper evaluation of autoconvergence
+            logged_epochs, tr_err_hist, te_err_hist = parse_losses(prev_logfile)
+            tr_err_hist = list(tr_err_hist[logged_epochs <= configs.start_epoch]) #keep only logged losses up to restart epoch
+            te_err_hist = list(te_err_hist[logged_epochs <= configs.start_epoch]) #keep only logged losses up to restart epoch
+
 
         #if configs.auto_training_batch:
         ##    configs.training_batch_size, changed = get_training_batch_size(configs, model)  # confirm we can keep on at this batch size
