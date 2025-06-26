@@ -17,8 +17,8 @@ from models import *
 from Image_Processing_Utils import *
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
 from args_utils import max_epoch
+from qcnico.coords_io import read_xyz
 
 
 class build_dataset(Dataset):
@@ -26,14 +26,12 @@ class build_dataset(Dataset):
         np.random.seed(configs.dataset_seed)
         if configs.training_dataset == 'amorphous':
             self.samples = np.load('data/ac2d_coords_Meta.npy', allow_pickle=True)
-            self.samples_identity = np.load('data/ac2d_symbols.npy', allow_pickle=True)
-            self.samples = transform_data_amorphous(self.samples,self.samples_identity)
+            self.samples = transform_data_amorphous(self.samples)
             self.pick=np.load('data/p6dot7andmore.npy', allow_pickle=True)
             self.samples=self.samples[self.pick.astype('int').tolist()]
             self.samples = np.expand_dims(self.samples, axis=1)
 
             self.samples = self.samples[:,:,0:106,0:106]
-           # self.samples2 = self.samples[:,:,-212:,-212:]
 
             # augment by horizontal flips
             flipped = np.flip(self.samples.copy(),axis=3)
@@ -48,6 +46,25 @@ class build_dataset(Dataset):
 
             # self.samples = np.rot90(self.samples,-1,axes=(2,3))
             #self.samples = self.samples > 0.3 # coarsening
+        
+        elif configs.training_dataset == 'graphene':
+            zgnr = read_xyz('data/gnr_zigzag_11x12.xyz')
+            agnr = read_xyz('data/gnr_armchair_11x6.xyz')
+            self.samples = np.array([zgnr, agnr])
+            self.samples = transform_data_graphene(self.samples)
+            self.samples = np.expand_dims(self.samples, axis=1)
+            self.samples = self.samples[:,:,0:106,0:106]
+            
+            flipped = np.flip(self.samples.copy(),axis=3)
+            flipped2 = np.flip(self.samples.copy(),axis=2)
+            rot1=np.rot90(self.samples.copy(),k=1,axes=(2,3))
+            rot2=np.rot90(self.samples.copy(),k=2,axes=(2,3))
+            rot3=np.rot90(self.samples.copy(),k=3,axes=(2,3))
+
+            self.samples = np.concatenate((self.samples,rot1,rot3,rot2,flipped,flipped2),axis=0)
+
+
+
 
         assert self.samples.ndim == 4
 
@@ -76,15 +93,28 @@ class build_dataset(Dataset):
     def __getitem__(self, idx):
         return self.samples[idx]
 
-def transform_data_amorphous(sample, sample_identity):
-    newdata = np.zeros((sample.shape[0], 106, 123))
-    for i in range(0, len(sample)):
-        for j in range(0, sample.shape[1]):
-
-            if sample_identity[j] == 'C':
-                newdata[i, int((sample[i, j, 2]) / 0.2), int((sample[i, j, 0]) / 0.2)] = 1
-
+def _pixelize_data(samples, nsamples, natoms, icoord):
+    img_shape = (106, 123)
+    newdata = np.zeros((nsamples, *img_shape))
+    for i in range(0, nsamples):
+        N = natoms[i]
+        for j in range(0, N):
+            pixel_coords = tuple(int((samples[i, j, q]) / 0.2) for q in icoord) #find pixel containing jth atom of ith sample
+            in_bounds = (pixel_coords[0] < img_shape[0]) & (pixel_coords[1] < img_shape[1])
+            if in_bounds: #ignore any atoms whose coordinates lie outside of the pixel image
+                newdata[i, *pixel_coords] = 1
     return newdata
+
+def transform_data_amorphous(samples):
+    nsamples = samples.shape[0]
+    natoms = np.ones(nsamples, dtype='int') * samples.shape[1]
+    return _pixelize_data(samples, nsamples, natoms, icoord=(2,0))
+
+def transform_data_graphene(samples):
+    nsamples = len(samples)
+    natoms = [sample.shape[0] for sample in samples]
+    return _pixelize_data(samples, nsamples, natoms, icoord=(1,0))    
+
 
 def get_dir_name(model, training_data, filters, layers, dilation, filter_size, noise, den_var, dataset_size):
     dir_name = "model=%d_dataset=%d_dataset_size=%d_filters=%d_layers=%d_dilation=%d_filter_size=%d_noise=%.1f_denvar=%.1f" % (model, training_data, dataset_size, filters, layers, dilation, filter_size, noise, den_var)  # directory where tensorboard logfiles will be saved
@@ -131,31 +161,6 @@ def initialize_training(configs):
     return model, optimizer, dataDims
 
 def load_checkpoint_training(configs, run_dir, model, optim):
-    cuda_avail = torch.cuda.is_available()
-    if cuda_avail:
-
-        device = torch.device('cuda:0')
-    else:
-        device = torch.device('cpu')
-
-    if configs.start_epoch > 0:
-        chk_path = os.path.join(run_dir, f'model-epoch_{configs.start_epoch}')
-        try:
-            checkpoint = torch.load(chk_path)
-        except FileNotFoundError as e:
-            print(f'[load_checkpoint_training] FileNotFoundError: {str(chk_path)}')
-            print(f'Loading most recent checkpoint instead.')
-
-    else: #negative start_epoch loads most recent checkpoint
-        latest_epoch = max_epoch(configs.experiment_name)
-        chk_path = run_dir / f'model-epoch_{latest_epoch}.pt'
-        checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
-
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optim.load_state_dict(checkpoint['optimizer_state_dict'])
-    return model, optim, latest_epoch+1
-
-def load_checkpoint_training(configs, run_dir, model, optim):
     run_dir = Path(run_dir)
     cuda_avail = torch.cuda.is_available()
     if cuda_avail:
@@ -177,8 +182,11 @@ def load_checkpoint_training(configs, run_dir, model, optim):
     try:
         model.load_state_dict(checkpoint['model_state_dict'])
     except:
-        model_state_dict = {k.replace("module.", ""):v for k,v in checkpoint["model_state_dict"].items()}
-        model.load_state_dict[model_state_dict]
+        model_state_dict = {k.replace("module.", ""):v for k,v in checkpoint["model_state_dict"].items()} 
+        if configs.vanilla_layers == 0:
+            model_state_dict = {k.replace("conv_layers.", "equivariant_layers."):v for k,v in model_state_dict.items()}
+
+        model.load_state_dict(model_state_dict)
     optim.load_state_dict(checkpoint['optimizer_state_dict'])
     return model, optim, latest_epoch+1
 
@@ -322,7 +330,7 @@ def generate_samples_gated(configs, dataDims, model):
                             #out = generator(sample_batch.float())
                             out = model(sample_batch[:, :, i - dataDims['conv field'] - 1:i  + 1, j - dataDims['conv field']:j + dataDims['conv field'] + 1].float())
                             out = torch.reshape(out, (out.shape[0], dataDims['classes'] + 1, dataDims['channels'], out.shape[-2], out.shape[-1]))
-                            probs = F.softmax(out[:, 1:, k, -1, dataDims['conv field']]/1, dim=1).data # the remove the lowest element (boundary)
+                            probs = F.softmax(out[:, 1:, k, -1, dataDims['conv field']]/configs.softmax_temp, dim=1).data # the remove the lowest element (boundary)
                             sample_batch[:, k, i, j] = (torch.multinomial(probs, 1).float() + 1).squeeze(1) / dataDims['classes']  # convert output back to training space
 
                             del out, probs
@@ -404,7 +412,7 @@ def generate_samples_gated(configs, dataDims, model):
                         out = model(sample_bundle.float())  # query the network about only area within the receptive field
                         out = torch.reshape(out, (out.shape[0], dataDims['classes'] + 1, dataDims['channels'], out.shape[-2], out.shape[-1]))  # reshape to select channels
 
-                        probs = F.softmax(out[:, 1:, k, -1, dataDims['conv field']] / 1, dim=1).data  # the remove the lowest element (boundary)
+                        probs = F.softmax(out[:, 1:, k, -1, dataDims['conv field']] / configs.softmax_temp, dim=1).data  # the remove the lowest element (boundary)
                         logits = (torch.multinomial(probs, 1).float() + 1).squeeze(1) / dataDims['classes']
                         for dep in range(sample_bundle.shape[0]):  # assign the new outputs in the right spot
                             sample_batch[:, k, active_rows[dep], row_indices[active_rows[dep]]] = logits[dep].data
