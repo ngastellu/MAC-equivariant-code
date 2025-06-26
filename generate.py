@@ -78,6 +78,8 @@ try:
     model.load_state_dict(bc_new)
 except:
     bc_new_new = {k.replace("module.", ""):v for k,v in bc_new.items()}
+    if configs.vanilla_layers == 0:
+        bc_new_new = {k.replace("conv_layers.", "equivariant_layers."):v for k,v in bc_new_new.items()}
     model.load_state_dict(bc_new_new)
     
 # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
